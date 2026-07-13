@@ -84,13 +84,18 @@ jobs:
       - name: Build Kernel
         run: |
           cd kernel-source
+          
+          # Remove broken/unrelated sa6155 dtb targets from Makefile to prevent compilation crash
+          sed -i '/sa6155/d' arch/arm64/boot/dts/qcom/Makefile
+          
           export PATH=$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH
           make O=out ARCH=arm64 $DEFCONFIG_NAME
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            Image.gz-dtb
+          
       - name: Pack AnyKernel3 flashable ZIP
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
