@@ -98,7 +98,7 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             Image.gz-dtb dtbs
           
-          # Manually package dtbo.img using the compiled mkdtimg host tool
+          # Manually package dtbo.img using the Python mkdtboimg.py tool from repository root
           echo "[*] Manually packaging dtbo.img..."
           DTBO_FILES=$(find out/arch/arm64/boot/dts/ -name "*davinci*.dtbo" -o -name "*sm6150*.dtbo")
           if [ -z "$DTBO_FILES" ]; then
@@ -108,7 +108,7 @@ jobs:
           
           if [ -n "$DTBO_FILES" ]; then
               echo "[+] Found overlay files to pack: $DTBO_FILES"
-              out/scripts/dtc/mkdtimg create out/arch/arm64/boot/dtbo.img $DTBO_FILES
+              python3 ../mkdtboimg.py create out/arch/arm64/boot/dtbo.img $DTBO_FILES
               echo "[+] Successfully packaged out/arch/arm64/boot/dtbo.img"
           else
               echo "[!] No .dtbo files found. Skipping dtbo.img manual packaging."
