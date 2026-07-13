@@ -57,6 +57,12 @@ jobs:
           python3 ../patch_susfs_rejects.py
           rm -rf susfs4ksu
 
+      - name: Debug namespace.c
+        run: |
+          echo "=== Printing lines 120-180 of patched namespace.c ==="
+          sed -n '120,180p' kernel-source/fs/namespace.c
+          echo "=== End of Debug ==="
+
       - name: Configure defconfig
         run: |
           cd kernel-source
