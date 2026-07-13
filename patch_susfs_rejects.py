@@ -1,9 +1,19 @@
 import os
 
+def get_filepath(rel_path):
+    # Try local path first (if running inside kernel-source directory)
+    if os.path.exists(rel_path):
+        return rel_path
+    # Try parent directory prefix (if running from repository root)
+    alt_path = os.path.join("kernel-source", rel_path)
+    if os.path.exists(alt_path):
+        return alt_path
+    return None
+
 def patch_cmdline():
-    filepath = "kernel-source/fs/proc/cmdline.c"
-    if not os.path.exists(filepath):
-        print(f"[!] {filepath} not found.")
+    filepath = get_filepath("fs/proc/cmdline.c")
+    if not filepath:
+        print("[!] fs/proc/cmdline.c not found.")
         return False
         
     with open(filepath, "r", encoding="utf-8") as f:
@@ -45,13 +55,13 @@ static int cmdline_proc_show"""
         
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
-    print("[+] Successfully patched cmdline.c")
+    print(f"[+] Successfully patched {filepath}")
     return True
 
 def patch_task_mmu():
-    filepath = "kernel-source/fs/proc/task_mmu.c"
-    if not os.path.exists(filepath):
-        print(f"[!] {filepath} not found.")
+    filepath = get_filepath("fs/proc/task_mmu.c")
+    if not filepath:
+        print("[!] fs/proc/task_mmu.c not found.")
         return False
         
     with open(filepath, "r", encoding="utf-8") as f:
@@ -101,19 +111,9 @@ extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, un
         return False
         
     # 3. Add hook inside show_map_vma (target VMA file inode parsing)
-    target_vma_file = """\tdev = inode->i_sb->s_dev;
+    target_inode = """		dev = inode->i_sb->s_dev;
 		ino = inode->i_ino;"""
-    # Let's search with regex or standard block replacement
-    target_block = """\tif (file) {
-		struct inode *inode = file_inode(vma->vm_file);
-		dev = inode->i_sb->s_dev;
-		ino = inode->i_ino;
-		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
-	}"""
-    
-    body_patch = """\tif (file) {
-		struct inode *inode = file_inode(vma->vm_file);
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+    inode_patch = """#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 		if (unlikely(inode->i_state & INODE_STATE_SUS_KSTAT)) {
 			susfs_sus_ino_for_show_map_vma(inode->i_ino, &dev, &ino);
 			goto bypass_orig_flow;
@@ -123,24 +123,14 @@ extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, un
 		ino = inode->i_ino;
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 bypass_orig_flow:
-#endif
-		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
-	}"""
-    
-    if target_block in content:
-        content = content.replace(target_block, body_patch, 1)
+#endif"""
+    if target_inode in content:
+        content = content.replace(target_inode, inode_patch, 1)
     else:
-        # Try variation with different indentation or spacing
-        target_block_alt = """\tif (file) {
-		struct inode *inode = file_inode(vma->vm_file);
-		dev = inode->i_sb->s_dev;
-		ino = inode->i_ino;
-		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
-	}"""
-        # We can search dynamically or replace just the inode part
-        target_inode = """\t\tdev = inode->i_sb->s_dev;
+        # Try alternate tabs formatting
+        target_inode_alt = """\t\tdev = inode->i_sb->s_dev;
 \t\tino = inode->i_ino;"""
-        inode_patch = """#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+        inode_patch_alt = """#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 \t\tif (unlikely(inode->i_state & INODE_STATE_SUS_KSTAT)) {
 \t\t\tsusfs_sus_ino_for_show_map_vma(inode->i_ino, &dev, &ino);
 \t\t\tgoto bypass_orig_flow;
@@ -151,15 +141,15 @@ bypass_orig_flow:
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 bypass_orig_flow:
 #endif"""
-        if target_inode in content:
-            content = content.replace(target_inode, inode_patch, 1)
+        if target_inode_alt in content:
+            content = content.replace(target_inode_alt, inode_patch_alt, 1)
         else:
             print("[!] Cannot find target block in show_map_vma inside task_mmu.c")
             return False
             
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
-    print("[+] Successfully patched task_mmu.c")
+    print(f"[+] Successfully patched {filepath}")
     return True
 
 if __name__ == "__main__":
