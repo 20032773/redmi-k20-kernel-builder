@@ -7,7 +7,7 @@ properties() { '
 kernel.string=SukiSU-Ultra Kernel for Redmi K20 (davinci)
 do.devicecheck=1
 do.modules=1
-do.systemless=1
+do.systemless=0
 do.cleanup=1
 do.cleanuponabort=1
 device.name1=davinci
