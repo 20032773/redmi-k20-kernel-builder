@@ -91,26 +91,41 @@ jobs:
           export PATH=$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH
           make O=out ARCH=arm64 $DEFCONFIG_NAME
           
-          # Attempt to build Image.gz-dtb, dtbo.img, and dtboimage.
-          # If dtbo target is missing, fall back to building just Image.gz-dtb
+          # Compile Image.gz-dtb, dtbs (which builds the individual .dtbo overlays)
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image.gz-dtb dtbo.img dtboimage || \
-          make -j$(nproc) O=out ARCH=arm64 \
-            CC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image.gz-dtb
+            Image.gz-dtb dtbs
+          
+          # Manually package dtbo.img using the compiled mkdtimg host tool
+          echo "[*] Manually packaging dtbo.img..."
+          DTBO_FILES=$(find out/arch/arm64/boot/dts/ -name "*davinci*.dtbo" -o -name "*sm6150*.dtbo")
+          if [ -z "$DTBO_FILES" ]; then
+              # Fallback if no specific davinci/sm6150 names found
+              DTBO_FILES=$(find out/arch/arm64/boot/dts/ -name "*.dtbo")
+          fi
+          
+          if [ -n "$DTBO_FILES" ]; then
+              echo "[+] Found overlay files to pack: $DTBO_FILES"
+              out/scripts/dtc/mkdtimg create out/arch/arm64/boot/dtbo.img $DTBO_FILES
+              echo "[+] Successfully packaged out/arch/arm64/boot/dtbo.img"
+          else
+              echo "[!] No .dtbo files found. Skipping dtbo.img manual packaging."
+          fi
 
       - name: Pack AnyKernel3 flashable ZIP
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
           
-          # Dynamically search and copy compiled dtbo.img if it exists
-          find kernel-source/out/arch/arm64/boot/ -name "dtbo.img" -exec cp {} AnyKernel3/ \;
+          # Copy manually packaged dtbo.img if it exists
+          if [ -f kernel-source/out/arch/arm64/boot/dtbo.img ]; then
+              cp kernel-source/out/arch/arm64/boot/dtbo.img AnyKernel3/
+              echo "[+] Copied dtbo.img to AnyKernel3"
+          else
+              echo "[!] dtbo.img not found in build boot directory."
+          fi
           
           cp anykernel.sh AnyKernel3/anykernel.sh
           cd AnyKernel3
