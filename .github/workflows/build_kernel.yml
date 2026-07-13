@@ -1,0 +1,89 @@
+name: Build Redmi K20 Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Kernel for Redmi K20 (davinci)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Config Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev coccinelle
+
+      - name: Clone Proton Clang Toolchain
+        run: |
+          git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang-toolchain
+
+      - name: Clone Kernel Source
+        run: |
+          git clone https://github.com/LineageOS/android_kernel_xiaomi_sm6150.git -b lineage-23.2 --depth=1 kernel-source
+
+      - name: Integrate SukiSU-Ultra
+        run: |
+          cd kernel-source
+          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b susfs-main --depth=1 drivers/kernelsu
+          echo "obj-y += kernelsu/" >> drivers/Makefile
+          grep -q "kernelsu" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+      - name: Apply KernelSU Manual Hooks (Coccinelle)
+        run: |
+          cd kernel-source
+          git clone https://github.com/devnoname120/kernelsu-coccinelle.git --depth=1
+          cd kernelsu-coccinelle/classic-hooks
+          ./apply.sh ../..
+          cd ../..
+          rm -rf kernelsu-coccinelle
+
+      - name: Integrate SUSFS
+        run: |
+          cd kernel-source
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 --depth=1
+          cp susfs4ksu/fs/susfs.c fs/
+          cp susfs4ksu/include/linux/susfs.h include/linux/
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.14.patch
+          rm -rf susfs4ksu
+
+      - name: Configure defconfig
+        run: |
+          cd kernel-source
+          # Enable KSU and SUSFS configuration flags
+          echo "CONFIG_KSU=y" >> arch/arm64/configs/vendor/davinci_defconfig
+          echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/vendor/davinci_defconfig
+          echo "CONFIG_KPM=y" >> arch/arm64/configs/vendor/davinci_defconfig
+          echo "CONFIG_KALLSYMS=y" >> arch/arm64/configs/vendor/davinci_defconfig
+          echo "CONFIG_KALLSYMS_ALL=y" >> arch/arm64/configs/vendor/davinci_defconfig
+
+      - name: Build Kernel
+        run: |
+          cd kernel-source
+          export PATH=$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH
+          make O=out ARCH=arm64 vendor/davinci_defconfig
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip
+
+      - name: Pack AnyKernel3 flashable ZIP
+        run: |
+          git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cp anykernel.sh AnyKernel3/anykernel.sh
+          cd AnyKernel3
+          zip -r9 ../AnyKernel3-davinci-SukiSU-Ultra.zip * -x .git* README.md
+
+      - name: Upload Flashable ZIP Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3-davinci-SukiSU-Ultra
+          path: AnyKernel3-davinci-SukiSU-Ultra.zip
