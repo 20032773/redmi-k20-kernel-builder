@@ -46,7 +46,9 @@ jobs:
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 --depth=1
           cp susfs4ksu/kernel_patches/fs/susfs.c fs/
           cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
-          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.14.patch
+          # Apply patch, allowing it to return non-zero because we will resolve the rejects via Python
+          patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.14.patch || true
+          python3 ../patch_susfs_rejects.py
           rm -rf susfs4ksu
 
       - name: Configure defconfig
