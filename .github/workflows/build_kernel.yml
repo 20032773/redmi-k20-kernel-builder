@@ -33,6 +33,9 @@ jobs:
           mv drivers/kernelsu_tmp/kernel drivers/kernelsu
           rm -rf drivers/kernelsu_tmp
           
+          # Remove KPROBES dependency from SukiSU-Ultra Kconfig to allow compiling manual hook mode on non-KPROBES kernels
+          sed -i 's/depends on KPROBES \&\& EXT4_FS/depends on EXT4_FS/' drivers/kernelsu/Kconfig
+          
           # Configure Makefile and Kconfig
           echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig

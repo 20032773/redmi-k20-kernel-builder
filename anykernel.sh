@@ -33,3 +33,5 @@ dump_boot;
 # write back picture/ramdisk changes
 write_boot;
 ## end install
+
+exit 0;
