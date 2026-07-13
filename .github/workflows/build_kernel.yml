@@ -90,16 +90,28 @@ jobs:
           
           export PATH=$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH
           make O=out ARCH=arm64 $DEFCONFIG_NAME
+          
+          # Attempt to build Image.gz-dtb, dtbo.img, and dtboimage.
+          # If dtbo target is missing, fall back to building just Image.gz-dtb
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            Image.gz-dtb dtbo.img dtboimage || \
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             Image.gz-dtb
-          
+
       - name: Pack AnyKernel3 flashable ZIP
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          
+          # Dynamically search and copy compiled dtbo.img if it exists
+          find kernel-source/out/arch/arm64/boot/ -name "dtbo.img" -exec cp {} AnyKernel3/ \;
+          
           cp anykernel.sh AnyKernel3/anykernel.sh
           cd AnyKernel3
           zip -r9 ../AnyKernel3-davinci-SukiSU-Ultra.zip * -x .git* README.md
