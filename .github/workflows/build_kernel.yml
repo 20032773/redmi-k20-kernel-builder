@@ -14,7 +14,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev coccinelle
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev coccinelle gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Clone Proton Clang Toolchain
         run: |
@@ -44,35 +44,41 @@ jobs:
         run: |
           cd kernel-source
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 --depth=1
-          cp susfs4ksu/fs/susfs.c fs/
-          cp susfs4ksu/include/linux/susfs.h include/linux/
+          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
+          cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
           patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.14.patch
           rm -rf susfs4ksu
 
       - name: Configure defconfig
         run: |
           cd kernel-source
-          # Enable KSU and SUSFS configuration flags
-          echo "CONFIG_KSU=y" >> arch/arm64/configs/vendor/davinci_defconfig
-          echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/vendor/davinci_defconfig
-          echo "CONFIG_KPM=y" >> arch/arm64/configs/vendor/davinci_defconfig
-          echo "CONFIG_KALLSYMS=y" >> arch/arm64/configs/vendor/davinci_defconfig
-          echo "CONFIG_KALLSYMS_ALL=y" >> arch/arm64/configs/vendor/davinci_defconfig
+          # Dynamically find the davinci_defconfig or fallback to sm6150_defconfig
+          DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*davinci_defconfig" -print -quit)
+          if [ -z "$DEFCONFIG_FILE" ]; then
+              DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*sm6150_defconfig" -print -quit)
+          fi
+          echo "Found defconfig: $DEFCONFIG_FILE"
+          
+          # Append SukiSU-Ultra & SUSFS configs
+          echo "CONFIG_KSU=y" >> "$DEFCONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG_FILE"
+          echo "CONFIG_KPM=y" >> "$DEFCONFIG_FILE"
+          echo "CONFIG_KALLSYMS=y" >> "$DEFCONFIG_FILE"
+          echo "CONFIG_KALLSYMS_ALL=y" >> "$DEFCONFIG_FILE"
+          
+          # Save the defconfig name for the build step
+          DEFCONFIG_NAME=$(echo "$DEFCONFIG_FILE" | sed 's|arch/arm64/configs/||')
+          echo "DEFCONFIG_NAME=$DEFCONFIG_NAME" >> $GITHUB_ENV
 
       - name: Build Kernel
         run: |
           cd kernel-source
           export PATH=$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH
-          make O=out ARCH=arm64 vendor/davinci_defconfig
+          make O=out ARCH=arm64 $DEFCONFIG_NAME
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
       - name: Pack AnyKernel3 flashable ZIP
         run: |
