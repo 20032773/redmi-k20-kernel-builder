@@ -70,6 +70,15 @@ jobs:
           fi
           echo "Found defconfig: $DEFCONFIG_FILE"
           
+          # Append davinci-specific config fragment (davinci.config) to enable davinci-specific drivers (touchscreen, compass, fingerprint etc.)
+          DAVINCI_CONFIG="arch/arm64/configs/vendor/davinci.config"
+          if [ -f "$DAVINCI_CONFIG" ]; then
+              echo "[+] Appending davinci.config to defconfig..."
+              cat "$DAVINCI_CONFIG" >> "$DEFCONFIG_FILE"
+          else
+              echo "[!] davinci.config not found in vendor configs."
+          fi
+          
           # Append SukiSU-Ultra & SUSFS configs
           echo "CONFIG_KSU=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG_FILE"
