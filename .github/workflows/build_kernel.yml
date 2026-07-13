@@ -54,10 +54,13 @@ jobs:
       - name: Configure defconfig
         run: |
           cd kernel-source
-          # Dynamically find the davinci_defconfig or fallback to sm6150_defconfig
-          DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*davinci_defconfig" -print -quit)
-          if [ -z "$DEFCONFIG_FILE" ]; then
-              DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*sm6150_defconfig" -print -quit)
+          # Dynamically find the sdmsteppe-perf_defconfig or fallback to any perf_defconfig
+          DEFCONFIG_FILE="arch/arm64/configs/vendor/sdmsteppe-perf_defconfig"
+          if [ ! -f "$DEFCONFIG_FILE" ]; then
+              DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*sdmsteppe-perf_defconfig" -print -quit)
+              if [ -z "$DEFCONFIG_FILE" ]; then
+                  DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*perf_defconfig" -print -quit)
+              fi
           fi
           echo "Found defconfig: $DEFCONFIG_FILE"
           
