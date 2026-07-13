@@ -81,6 +81,7 @@ jobs:
           
           # Append SukiSU-Ultra & SUSFS configs
           echo "CONFIG_KSU=y" >> "$DEFCONFIG_FILE"
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KPM=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KALLSYMS=y" >> "$DEFCONFIG_FILE"
