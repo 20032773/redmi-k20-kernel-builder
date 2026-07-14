@@ -38,6 +38,8 @@ workflow 的預設 commit 更新成該次 `build-info.txt` 記錄的 `ksun_commi
 - KernelSU Next 保持為獨立 Git repository，讓其 Kbuild 可以產生正確的版本號。
 - classic hooks 工具固定在 commit
   `9e30076418813fc7eaab6481da2e745dfde56249`，避免上游變動造成不可重現的建置。
+- 套用 classic hooks 時排除 Next legacy 已不再提供 handler 的舊 `devpts` hook，
+  避免直到 `vmlinux` 連結階段才出現 undefined reference。
 - `patch_manual_hooks.py` 補上 vendor Linux 4.14 所需的 namespace 宣告，以及
   KernelSU Next supercall 使用的 reboot hook；插入點不符合預期時會直接停止建置。
 - `patch_ksun_legacy.py` 修正 SULog 在 Linux 4.14 的 boottime `timespec` 型別，

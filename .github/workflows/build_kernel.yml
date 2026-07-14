@@ -110,14 +110,29 @@ jobs:
           cd kernel-source
           git clone "$KSU_HOOKS_REPO" kernelsu-coccinelle
           git -C kernelsu-coccinelle checkout --detach "$KSU_HOOKS_COMMIT"
-          ./kernelsu-coccinelle/classic-hooks/apply.sh .
+
+          # KernelSU Next legacy no longer exports ksu_handle_devpts(). Apply
+          # the remaining classic rules only; adding the obsolete devpts call
+          # would survive compilation and fail later while linking vmlinux.
+          SP_FILE="$(realpath kernelsu-coccinelle/classic-hooks/kernelsu.cocci)"
+          HOOK_FILES="$(grep -Po 'file in "\K[^"]+' "$SP_FILE" | sort -u)"
+          while IFS= read -r file; do
+            if [ "$file" = 'fs/devpts/inode.c' ]; then
+              continue
+            fi
+            spatch --very-quiet --sp-file "$SP_FILE" --in-place \
+              --linux-spacing "$file" || true
+          done <<< "$HOOK_FILES"
           rm -rf kernelsu-coccinelle
 
           python3 ../patch_manual_hooks.py
 
           # A manual-hook kernel must never accidentally enable a kprobe hook alias.
           test "$(grep -RIl 'KernelSU: Manual hooks are incompatible' drivers/input/input.c | wc -l)" -eq 1
-          grep -q 'ksu_handle_devpts' fs/devpts/inode.c
+          if grep -q 'ksu_handle_devpts' fs/devpts/inode.c; then
+            echo 'error: obsolete KernelSU devpts hook was unexpectedly installed' >&2
+            exit 1
+          fi
           grep -q 'ksu_handle_execveat' fs/exec.c
           grep -q 'ksu_handle_faccessat' fs/open.c
           grep -q 'ksu_handle_input_handle_event' drivers/input/input.c
