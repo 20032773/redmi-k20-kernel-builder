@@ -1,11 +1,15 @@
 import os
 
-kernel_source = "kernel-source"
-target_dir = os.path.join(kernel_source, "drivers", "kernelsu")
+# Check both paths to make it work regardless of current working directory
+target_dir = os.path.join("drivers", "kernelsu")
+if not os.path.exists(target_dir):
+    target_dir = os.path.join("kernel-source", "drivers", "kernelsu")
 
 if not os.path.exists(target_dir):
-    print("Error: drivers/kernelsu directory not found!")
+    print(f"Error: drivers/kernelsu directory not found! (Tried: drivers/kernelsu and kernel-source/drivers/kernelsu)")
     exit(1)
+
+print(f"Found SukiSU driver directory at: {target_dir}")
 
 patch_code = """
 #include <linux/version.h>
