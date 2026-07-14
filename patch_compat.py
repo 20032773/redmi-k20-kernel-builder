@@ -27,7 +27,7 @@ def write_file(path, content):
 ###############################################################################
 # 1. PATCH kernel_compat.h - comprehensive compatibility layer
 ###############################################################################
-print("\n[1/6] Patching kernel_compat.h ...")
+print("\n[1/9] Patching kernel_compat.h ...")
 compat_path = os.path.join(ksu_dir, "kernel_compat.h")
 compat = read_file(compat_path)
 
@@ -57,6 +57,11 @@ write_file(compat_path, '''#ifndef __KSU_H_KERNEL_COMPAT_REAL
 /* --- MODULE_IMPORT_NS: introduced in 5.4 --- */
 #ifndef MODULE_IMPORT_NS
 #define MODULE_IMPORT_NS(ns)
+#endif
+
+/* --- __poll_t: file_operations.poll used unsigned int before 4.16 --- */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0)
+typedef unsigned int __poll_t;
 #endif
 
 /* --- syscall_fn_t: introduced in 4.19 for arm64 --- */
@@ -171,14 +176,6 @@ typedef pgd_t p4d_t;
 #define __pmd_to_phys(pmd) (pmd_val(pmd) & PHYS_MASK & PAGE_MASK)
 #endif
 
-/* --- path_mount: introduced in 5.9, was do_mount before --- */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-#ifndef path_mount
-#define path_mount(dev, path, type, flags, data) \\
-    do_mount(dev, (path)->dentry->d_iname, type, flags, data)
-#endif
-#endif
-
 /* --- seccomp action-cache sizes: added to arm64 after Linux 4.14 --- */
 #ifndef SECCOMP_ARCH_NATIVE_NR
 #define SECCOMP_ARCH_NATIVE_NR NR_syscalls
@@ -208,7 +205,7 @@ static inline int ksu_copy_from_user_retry(void *to, const void __user *from, un
 ###############################################################################
 # 2. PATCH patch_memory.c - replace fixmap approach with 4.14 compatible
 ###############################################################################
-print("[2/6] Patching hook/arm64/patch_memory.c ...")
+print("[2/9] Patching hook/arm64/patch_memory.c ...")
 pm_path = os.path.join(ksu_dir, "hook", "arm64", "patch_memory.c")
 if os.path.exists(pm_path):
     write_file(pm_path, r'''/* SPDX-License-Identifier: GPL-2.0-only */
@@ -353,7 +350,7 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
 ###############################################################################
 # 3. PATCH include/util.h - fix close_fd fallback chain for 4.14
 ###############################################################################
-print("[3/6] Patching include/util.h ...")
+print("[3/9] Patching include/util.h ...")
 util_path = os.path.join(ksu_dir, "include", "util.h")
 if os.path.exists(util_path):
     write_file(util_path, '''#ifndef __KSU_H_UTIL
@@ -375,23 +372,417 @@ if os.path.exists(util_path):
 ''')
 
 ###############################################################################
-# 4. PATCH infra/su_mount_ns.c - fix ksys_unshare and path_mount for 4.14
+# 4. PATCH infra/su_mount_ns.c - backport namespace syscalls to Linux 4.14
 ###############################################################################
-print("[4/6] Patching infra/su_mount_ns.c ...")
+print("[4/9] Patching infra/su_mount_ns.c ...")
 ns_path = os.path.join(ksu_dir, "infra", "su_mount_ns.c")
 if os.path.exists(ns_path):
     ns = read_file(ns_path)
-    # Add version header if not present
-    if "LINUX_VERSION_CODE" not in ns or "ksys_unshare" in ns:
-        # Replace ksys_unshare with version-safe macro
-        ns = ns.replace("ksys_unshare(CLONE_NEWNS)", "sys_unshare(CLONE_NEWNS)")
-        ns = ns.replace('pr_warn("call ksys_unshare', 'pr_warn("call sys_unshare')
+
+    # mount.h was split out after 4.14. This file only needs MS_PRIVATE and
+    # MS_REC, both already supplied by linux/fs.h in the target kernel.
+    ns = ns.replace("#include <uapi/linux/mount.h>\n", "")
+
+    modern_setns = '''extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
+                      void *data_page);
+
+#if defined(__aarch64__)
+extern long __arm64_sys_setns(const struct pt_regs *regs);
+#elif defined(__x86_64__)
+extern long __x64_sys_setns(const struct pt_regs *regs);
+#endif
+
+static long ksu_sys_setns(int fd, int flags)
+{
+    struct pt_regs regs;
+    memset(&regs, 0, sizeof(regs));
+
+    PT_REGS_PARM1(&regs) = fd;
+    PT_REGS_PARM2(&regs) = flags;
+
+#if defined(__aarch64__)
+    return __arm64_sys_setns(&regs);
+#elif defined(__x86_64__)
+    return __x64_sys_setns(&regs);
+#else
+#error "Unsupported arch"
+#endif
+}
+'''
+    legacy_setns = '''/* Linux 4.14 predates syscall wrapper functions such as
+ * __arm64_sys_setns(); call the native syscall implementation directly. */
+static long ksu_sys_setns(int fd, int flags)
+{
+    return sys_setns(fd, flags);
+}
+'''
+    if modern_setns not in ns:
+        print("Error: unexpected SukiSU setns implementation in su_mount_ns.c")
+        exit(1)
+    ns = ns.replace(modern_setns, legacy_setns, 1)
+
+    modern_individual = '''static void ksu_mnt_ns_individual(void)
+{
+    long ret = ksys_unshare(CLONE_NEWNS);
+    if (ret) {
+        pr_warn("call ksys_unshare failed: %ld\\n", ret);
+        return;
+    }
+
+    // make root mount private
+    struct path root_path;
+    get_fs_root(current->fs, &root_path);
+    int pm_ret = path_mount(NULL, &root_path, NULL, MS_PRIVATE | MS_REC, NULL);
+    path_put(&root_path);
+
+    if (pm_ret < 0) {
+        pr_err("failed to make root private, err: %d\\n", pm_ret);
+    }
+}
+'''
+    legacy_individual = '''static void ksu_mnt_ns_individual(void)
+{
+    long ret = sys_unshare(CLONE_NEWNS);
+    mm_segment_t old_fs;
+
+    if (ret) {
+        pr_warn("call sys_unshare failed: %ld\\n", ret);
+        return;
+    }
+
+    /* Linux 4.14 has do_mount() rather than path_mount(). do_mount() treats
+     * dir_name as a userspace pointer, so temporarily allow the kernel string
+     * while making the root of the new namespace private. */
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    ret = do_mount(NULL, (const char __user *)"/", NULL,
+                   MS_PRIVATE | MS_REC, NULL);
+    set_fs(old_fs);
+
+    if (ret < 0)
+        pr_err("failed to make root private, err: %ld\\n", ret);
+}
+'''
+    if modern_individual not in ns:
+        print("Error: unexpected SukiSU individual mount namespace implementation")
+        exit(1)
+    ns = ns.replace(modern_individual, legacy_individual, 1)
+
+    # close_fd appeared after this kernel; sys_close is declared by syscalls.h.
+    ns = ns.replace("ksys_close(fd);", "sys_close(fd);")
     write_file(ns_path, ns)
 
 ###############################################################################
-# 5. PATCH Kbuild - force-include kernel_compat.h
+# 5. PATCH remaining filesystem APIs used only by late KSU objects
 ###############################################################################
-print("[5/6] Patching Kbuild ...")
+print("[5/9] Backporting fsnotify and umount APIs ...")
+
+umount_path = os.path.join(ksu_dir, "feature", "kernel_umount.c")
+umount_src = read_file(umount_path)
+modern_umount = '''extern int path_umount(struct path *path, int flags);
+
+static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+{
+    int err = path_umount(path, flags);
+    if (err) {
+        pr_info("umount %s failed: %d\\n", mnt, err);
+    }
+}
+'''
+legacy_umount = '''static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+{
+    mm_segment_t old_fs;
+    int err;
+
+    (void)path;
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    err = sys_umount((char __user *)mnt, flags);
+    set_fs(old_fs);
+    if (err)
+        pr_info("umount %s failed: %d\\n", mnt, err);
+}
+'''
+if modern_umount not in umount_src:
+    print("Error: unexpected SukiSU kernel_umount implementation")
+    exit(1)
+umount_src = umount_src.replace(modern_umount, legacy_umount, 1)
+write_file(umount_path, umount_src)
+
+observer_path = os.path.join(ksu_dir, "manager", "pkg_observer.c")
+observer = read_file(observer_path)
+modern_observer = '''static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask, struct inode *inode, struct inode *dir,
+                                  const struct qstr *file_name, u32 cookie)
+{
+    if (!file_name)
+        return 0;
+    if (mask & FS_ISDIR)
+        return 0;
+    if (file_name->len == 13 && !memcmp(file_name->name, "packages.list", 13)) {
+        pr_info("packages.list detected: %d\\n", mask);
+        track_throne(false);
+    }
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_inode_event = ksu_handle_inode_event,
+};
+'''
+legacy_observer = '''static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode,
+                            struct fsnotify_mark *inode_mark,
+                            struct fsnotify_mark *vfsmount_mark, u32 mask,
+                            const void *data, int data_type,
+                            const unsigned char *file_name, u32 cookie,
+                            struct fsnotify_iter_info *iter_info)
+{
+    if (!file_name || (mask & FS_ISDIR))
+        return 0;
+    if (!strcmp((const char *)file_name, "packages.list")) {
+        pr_info("packages.list detected: %d\\n", mask);
+        track_throne(false);
+    }
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_event = ksu_handle_event,
+};
+'''
+if modern_observer not in observer:
+    print("Error: unexpected SukiSU fsnotify callback implementation")
+    exit(1)
+observer = observer.replace(modern_observer, legacy_observer, 1)
+observer = observer.replace("fsnotify_add_inode_mark(m, inode, 0)",
+                            "fsnotify_add_mark(m, inode, NULL, 0)")
+write_file(observer_path, observer)
+
+###############################################################################
+# 6. PATCH SELinux integration - Linux 4.14 uses selinux_state.ss
+###############################################################################
+print("[6/9] Backporting SELinux integration to the Linux 4.14 state model ...")
+
+sepolicy_h_path = os.path.join(ksu_dir, "selinux", "sepolicy.h")
+sepolicy_h = read_file(sepolicy_h_path)
+if "struct selinux_policy;" not in sepolicy_h:
+    sepolicy_h = sepolicy_h.replace(
+        '#include "ss/policydb.h"\n',
+        '#include "ss/policydb.h"\n\n'
+        '/* Linux 4.14 has selinux_state.ss, not struct selinux_policy. */\n'
+        'struct selinux_policy;\n',
+        1,
+    )
+    write_file(sepolicy_h_path, sepolicy_h)
+
+rules_path = os.path.join(ksu_dir, "selinux", "rules.c")
+rules = read_file(rules_path)
+
+legacy_apply = r'''void apply_kernelsu_rules()
+{
+    struct policydb *db;
+
+    if (!getenforce()) {
+        pr_info("SELinux permissive or disabled, apply rules!\n");
+    }
+
+    /* Linux 4.14 keeps the active policydb in selinux_state.ss.  This is
+     * the same live-policy integration used by KernelSU before non-GKI
+     * support was removed.  A modern struct selinux_policy does not exist. */
+    rcu_read_lock();
+    db = &selinux_state.ss->policydb;
+
+    ksu_type(db, KERNEL_SU_DOMAIN, "domain");
+    ksu_permissive(db, KERNEL_SU_DOMAIN);
+    ksu_typeattribute(db, KERNEL_SU_DOMAIN, "mlstrustedsubject");
+    ksu_typeattribute(db, KERNEL_SU_DOMAIN, "netdomain");
+    ksu_typeattribute(db, KERNEL_SU_DOMAIN, "bluetoothdomain");
+
+    ksu_type(db, KERNEL_SU_FILE, "file_type");
+    ksu_typeattribute(db, KERNEL_SU_FILE, "mlstrustedobject");
+    ksu_allow(db, "domain", KERNEL_SU_FILE, ALL, ALL);
+    ksu_allow(db, KERNEL_SU_DOMAIN, ALL, ALL, ALL);
+
+    if (db->policyvers >= POLICYDB_VERSION_XPERMS_IOCTL) {
+        ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "blk_file", ALL);
+        ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "fifo_file", ALL);
+        ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "chr_file", ALL);
+        ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "file", ALL);
+    }
+
+    ksu_allow(db, "init", KERNEL_SU_DOMAIN, ALL, ALL);
+    ksu_allow(db, "servicemanager", KERNEL_SU_DOMAIN, "dir", "search");
+    ksu_allow(db, "servicemanager", KERNEL_SU_DOMAIN, "dir", "read");
+    ksu_allow(db, "servicemanager", KERNEL_SU_DOMAIN, "file", "open");
+    ksu_allow(db, "servicemanager", KERNEL_SU_DOMAIN, "file", "read");
+    ksu_allow(db, "servicemanager", KERNEL_SU_DOMAIN, "process", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "process", "sigchld");
+    ksu_allow(db, "logd", KERNEL_SU_DOMAIN, "dir", "search");
+    ksu_allow(db, "logd", KERNEL_SU_DOMAIN, "file", "read");
+    ksu_allow(db, "logd", KERNEL_SU_DOMAIN, "file", "open");
+    ksu_allow(db, "logd", KERNEL_SU_DOMAIN, "file", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fd", "use");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "write");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "read");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "open");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "read");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "write");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "connectto");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getopt");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getattr");
+    ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "dir", "search");
+    ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "file", "read");
+    ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "file", "open");
+    ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "process", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "binder", ALL);
+    ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
+    ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
+
+    rcu_read_unlock();
+    reset_avc_cache();
+}
+'''
+
+rules, count = re.subn(
+    r"void apply_kernelsu_rules\(\)\n\{.*?\n\}\n\n#define KSU_SEPOLICY_MAX_BATCH_SIZE",
+    legacy_apply + "\n#define KSU_SEPOLICY_MAX_BATCH_SIZE",
+    rules,
+    count=1,
+    flags=re.S,
+)
+if count != 1:
+    print("Error: unexpected SukiSU apply_kernelsu_rules implementation")
+    exit(1)
+
+legacy_handle = r'''int handle_sepolicy(void __user *user_data, u64 data_len)
+{
+    struct policydb *db;
+    struct sepol_batch_cursor cursor;
+    u8 *payload;
+    int ret = 0;
+    int success_cmd_count = 0;
+    u32 cmd_index = 0;
+
+    if (!user_data || !data_len)
+        return -EINVAL;
+    if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
+        return -E2BIG;
+
+    payload = kvmalloc((size_t)data_len, GFP_KERNEL);
+    if (!payload)
+        return -ENOMEM;
+    if (copy_from_user(payload, user_data, (size_t)data_len)) {
+        ret = -EFAULT;
+        goto out_free;
+    }
+
+    rcu_read_lock();
+    db = &selinux_state.ss->policydb;
+    cursor.cur = payload;
+    cursor.end = payload + (size_t)data_len;
+
+    while (cursor.cur < cursor.end) {
+        struct sepol_data header;
+        const char *args[KSU_SEPOLICY_MAX_ARGS] = { 0 };
+        int expected_argc;
+        u32 arg_index;
+
+        ret = sepol_read_cmd_header(&cursor, &header);
+        if (ret < 0)
+            break;
+        expected_argc = sepol_expected_argc(header.cmd);
+        if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
+            ret = -EINVAL;
+            break;
+        }
+        for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
+            ret = sepol_read_string(&cursor, &args[arg_index]);
+            if (ret < 0)
+                break;
+        }
+        if (ret < 0)
+            break;
+        ret = apply_one_sepolicy_cmd(db, &header, args);
+        if (ret >= 0)
+            success_cmd_count++;
+        cmd_index++;
+    }
+
+    rcu_read_unlock();
+    if (success_cmd_count)
+        reset_avc_cache();
+    if (ret >= 0)
+        ret = success_cmd_count;
+
+out_free:
+    kvfree(payload);
+    return ret;
+}
+'''
+rules, count = re.subn(
+    r"int handle_sepolicy\(void __user \*user_data, u64 data_len\)\n\{.*?\n\}\s*$",
+    legacy_handle,
+    rules,
+    count=1,
+    flags=re.S,
+)
+if count != 1:
+    print("Error: unexpected SukiSU handle_sepolicy implementation")
+    exit(1)
+write_file(rules_path, rules)
+
+# Modern SukiSU duplicates a struct selinux_policy snapshot.  That type and
+# ownership model do not exist on 4.14; rules.c above operates on the live
+# policydb instead, so keep ABI-compatible internal stubs for these unused
+# helpers and avoid compiling modern struct member accesses.
+sepolicy_c_path = os.path.join(ksu_dir, "selinux", "sepolicy.c")
+sepolicy_c = read_file(sepolicy_c_path)
+if "#include <linux/err.h>" not in sepolicy_c:
+    sepolicy_c = sepolicy_c.replace(
+        "#include <linux/gfp.h>\n", "#include <linux/err.h>\n#include <linux/gfp.h>\n", 1
+    )
+legacy_snapshot_stubs = r'''void ksu_destroy_sepolicy(struct selinux_policy *pol)
+{
+    (void)pol;
+}
+
+struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
+{
+    (void)old_pol;
+    return ERR_PTR(-EOPNOTSUPP);
+}
+'''
+sepolicy_c, count = re.subn(
+    r"void ksu_destroy_sepolicy\(struct selinux_policy \*pol\)\n\{.*?\n\}\s*$",
+    legacy_snapshot_stubs,
+    sepolicy_c,
+    count=1,
+    flags=re.S,
+)
+if count != 1:
+    print("Error: unexpected SukiSU policy snapshot implementation")
+    exit(1)
+write_file(sepolicy_c_path, sepolicy_c)
+
+# The SELinux-hide feature relies on modern policy snapshots and status fields.
+# Keep the core/root and live sepolicy support, but report this optional feature
+# as unsupported rather than compiling invalid 5.x state accesses into 4.14.
+selinux_hide_path = os.path.join(ksu_dir, "feature", "selinux_hide.c")
+write_file(selinux_hide_path, '''#include "selinux_hide.h"
+
+/* SELinux policy snapshots used by this optional feature do not exist in the
+ * Linux 4.14 SELinux state model.  Deliberately leave the feature unregistered. */
+void ksu_selinux_hide_init(void) { }
+void ksu_selinux_hide_exit(void) { }
+void ksu_selinux_hide_drop_backup_if_unused(void) { }
+void ksu_selinux_hide_handle_second_stage(void) { }
+void ksu_selinux_hide_handle_post_fs_data(void) { }
+''')
+
+###############################################################################
+# 7. PATCH Kbuild - force-include kernel_compat.h
+###############################################################################
+print("[7/9] Patching Kbuild ...")
 kbuild_path = os.path.join(ksu_dir, "Kbuild")
 kbuild = read_file(kbuild_path)
 force_flag = "ccflags-y += -include $(KSU_KERNEL_DIR)/kernel_compat.h"
@@ -404,7 +795,7 @@ else:
 ###############################################################################
 # 6. Create missing header wrappers
 ###############################################################################
-print("[6/6] Creating missing header wrappers ...")
+print("[8/9] Creating missing header wrappers ...")
 
 # linux/pgtable.h -> asm/pgtable.h (pgtable.h moved in 5.8)
 pgtable_wrapper = os.path.join(base_dir, "include", "linux", "pgtable.h")
@@ -412,6 +803,12 @@ if not os.path.exists(pgtable_wrapper):
     os.makedirs(os.path.dirname(pgtable_wrapper), exist_ok=True)
     # Check the wrapper is not already there overriding a real file
     write_file(pgtable_wrapper, '#include <asm/pgtable.h>\n')
+
+# linux/minmax.h was split out of linux/kernel.h after 4.14.
+minmax_wrapper = os.path.join(base_dir, "include", "linux", "minmax.h")
+if not os.path.exists(minmax_wrapper):
+    os.makedirs(os.path.dirname(minmax_wrapper), exist_ok=True)
+    write_file(minmax_wrapper, '#include <linux/kernel.h>\n')
 
 # asm-generic/fixmap.h - create stub if doesn't exist
 fixmap_dir = os.path.join(base_dir, "include", "asm-generic")
@@ -425,6 +822,7 @@ if not os.path.exists(fixmap_path):
 #endif
 ''')
 
+print("[9/9] Compatibility validation complete")
 print("\n" + "=" * 60)
 print("ALL PATCHES APPLIED SUCCESSFULLY!")
 print("=" * 60)
@@ -437,7 +835,6 @@ Summary of changes:
      - __flush_icache_range -> flush_icache_range
      - p4d fold-through-pgd stubs (5-level page table compat)
      - __pte_to_phys, __pud_to_phys, __pmd_to_phys
-     - path_mount -> do_mount fallback
      - SECCOMP_ARCH_NATIVE_NR / COMPAT_NR syscall bitmap sizes
      - Header guard collision fix (renamed guard macro)
 
@@ -453,11 +850,25 @@ Summary of changes:
      - >= 4.17: ksys_close
      - < 4.17:  sys_close (for our 4.14 kernel)
 
-  4. su_mount_ns.c    - Fixed ksys_unshare -> sys_unshare
+  4. su_mount_ns.c    - Linux 4.14 mount namespace backport:
+     - Removed unavailable uapi/linux/mount.h
+     - __arm64_sys_setns -> sys_setns
+     - ksys_unshare -> sys_unshare
+     - path_mount -> do_mount with a scoped KERNEL_DS address limit
 
-  5. Kbuild           - Force-include kernel_compat.h
+  5. Late filesystem APIs:
+     - __poll_t -> unsigned int
+     - Modern fsnotify callback/add-mark -> Linux 4.14 equivalents
+     - path_umount -> scoped sys_umount fallback
 
-  6. Header wrappers  - Created:
+  6. SELinux 4.14     - Uses the legacy selinux_state.ss live policy model
+     - Preserves root and live sepolicy rule support
+     - Disables only optional SELinux-hide (requires modern policy snapshots)
+
+  7. Kbuild           - Force-include kernel_compat.h
+
+  8. Header wrappers  - Created:
      - include/linux/pgtable.h -> asm/pgtable.h
+     - include/linux/minmax.h -> linux/kernel.h
      - include/asm-generic/fixmap.h -> asm/fixmap.h
 """)

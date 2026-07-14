@@ -59,6 +59,17 @@ fastboot/recovery 並理解還原方法後，才另外測試 `dtbo-davinci.img`�
 `__NR_compat_syscalls` 對應到新版 SukiSU seccomp cache 使用的 native/compat
 bitmap 尺寸，讓 64-bit 與 32-bit 應用都使用正確的 syscall 範圍。
 
+同一個相容層會把新版 mount namespace 程式改用 Linux 4.14 原生的
+`sys_setns()`、`sys_unshare()` 與 `do_mount()`；呼叫 `do_mount()` 時只在該
+段程式暫時切換 `KERNEL_DS`，隨後立即還原 address limit。
+
+最新版 SukiSU 的 SELinux 程式預設使用 5.x/6.x 的 `selinux_state.policy`
+結構，但本裝置的 4.14 核心仍使用 `selinux_state.ss`。建置流程會改用官方
+KernelSU 過去支援 non-GKI 核心的 live-policy 模式，保留 root 與動態 sepolicy
+規則；只有依賴新版 policy snapshot 的選用功能「隱藏 SELinux 修改」會停用。
+另外也會回補 4.14 的 `__poll_t`、舊式 fsnotify callback 及 `sys_umount()`，
+避免這些較晚編譯或最終連結階段才出現的錯誤。
+
 ## SUSFS 狀態
 
 目前流程先不啟用 SUSFS。舊流程只套用了 `susfs4ksu` 的核心檔案系統 patch，
