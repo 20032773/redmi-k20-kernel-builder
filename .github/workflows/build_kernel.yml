@@ -8,10 +8,10 @@ on:
         required: true
         default: lineage-23.2
         type: string
-      sukisu_ref:
-        description: SukiSU tag/branch; use "latest" for the newest stable release
+      ksun_ref:
+        description: KernelSU Next legacy branch/tag/commit (use "legacy" to test its newest commit)
         required: true
-        default: latest
+        default: fd093e8b879063aeb0192a3959b0652101ded623
         type: string
       build_dtbo:
         description: Build a separate davinci dtbo.img artifact
@@ -28,7 +28,9 @@ concurrency:
 
 env:
   KERNEL_REPO: https://github.com/LineageOS/android_kernel_xiaomi_sm6150.git
-  SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  KSUN_REPO: https://github.com/KernelSU-Next/KernelSU-Next.git
+  KSU_HOOKS_REPO: https://github.com/devnoname120/kernelsu-coccinelle.git
+  KSU_HOOKS_COMMIT: 9e30076418813fc7eaab6481da2e745dfde56249
   DEFCONFIG: vendor/sdmsteppe-perf_defconfig
 
 jobs:
@@ -61,61 +63,42 @@ jobs:
             echo "kernel_commit=$(git -C kernel-source rev-parse HEAD)"
           } > build-info.txt
 
-      - name: Integrate latest stable SukiSU Ultra
+      - name: Integrate KernelSU Next legacy
         env:
-          REQUESTED_SUKISU_REF: ${{ inputs.sukisu_ref }}
+          REQUESTED_KSUN_REF: ${{ inputs.ksun_ref }}
         run: |
           set -euxo pipefail
 
-          SUKISU_REF="$REQUESTED_SUKISU_REF"
-          if [ "$SUKISU_REF" = "latest" ]; then
-            SUKISU_REF="$(
-              curl -fsSL https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest |
-                python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])'
-            )"
-          fi
-          test -n "$SUKISU_REF"
+          KSUN_REF="$REQUESTED_KSUN_REF"
+          test -n "$KSUN_REF"
 
-          git clone --depth=1 --branch "$SUKISU_REF" "$SUKISU_REPO" sukisu-source
-          SUKISU_COMMIT="$(git -C sukisu-source rev-parse HEAD)"
-          SUKISU_VERSION_FULL="v${SUKISU_REF#v}-${SUKISU_COMMIT:0:8}@${SUKISU_REF}"
+          # Keep KernelSU-Next as a separate Git repository. Its Kbuild uses
+          # that repository to derive the manager-compatible version number.
+          git clone --branch legacy --single-branch "$KSUN_REPO" KernelSU-Next
+          if ! git -C KernelSU-Next checkout --detach "$KSUN_REF"; then
+            git -C KernelSU-Next fetch origin "$KSUN_REF"
+            git -C KernelSU-Next checkout --detach FETCH_HEAD
+          fi
+
+          KSUN_COMMIT="$(git -C KernelSU-Next rev-parse HEAD)"
+          KSUN_GIT_COUNT="$(git -C KernelSU-Next rev-list --count HEAD)"
+          KSUN_VERSION="$((30000 + KSUN_GIT_COUNT + 200))"
+          KSUN_TAG="$(git -C KernelSU-Next describe --tags --abbrev=0 2>/dev/null || true)"
           {
-            echo "sukisu_ref=$SUKISU_REF"
-            echo "sukisu_commit=$SUKISU_COMMIT"
-            echo "sukisu_version_full=$SUKISU_VERSION_FULL"
+            echo "ksun_ref=$KSUN_REF"
+            echo "ksun_commit=$KSUN_COMMIT"
+            echo "ksun_version=$KSUN_VERSION"
+            echo "ksun_nearest_tag=${KSUN_TAG:-none}"
           } >> build-info.txt
-          echo "SUKISU_VERSION_FULL=$SUKISU_VERSION_FULL" >> "$GITHUB_ENV"
 
           cd kernel-source
-          mv ../sukisu-source/kernel drivers/kernelsu
-          mv ../sukisu-source/uapi drivers/kernelsu/uapi
-          rm -rf ../sukisu-source
+          ln -s ../../KernelSU-Next/kernel drivers/kernelsu
 
-          # Linux 4.14 has asm/pgtable.h, while current SukiSU includes linux/pgtable.h.
+          # This vendor 4.14 tree has asm/pgtable.h but no linux/pgtable.h.
           printf '%s\n' '#include <asm/pgtable.h>' > include/linux/pgtable.h
 
-          # Manual hooks are installed in the next step, so KSU must not depend on kprobes.
-          sed -i 's/depends on KPROBES \&\& EXT4_FS/depends on EXT4_FS/' drivers/kernelsu/Kconfig
-          grep -q 'depends on EXT4_FS' drivers/kernelsu/Kconfig
-
-          # SukiSU 4.1.x sepolicy.c assumes modern SELinux policydb layouts.
-          # Redmi K20's 4.14 tree still uses the legacy flex-array layout, so
-          # use KernelSU's last officially supported non-GKI implementation.
-          LEGACY_SEPOLICY=/tmp/kernelsu-v0.9.5-sepolicy.c
-          curl --fail --location --silent --show-error \
-            https://raw.githubusercontent.com/tiann/KernelSU/v0.9.5/kernel/selinux/sepolicy.c \
-            --output "$LEGACY_SEPOLICY"
-          printf '%s  %s\n' \
-            '6c57a7ee92ae784d851125d5375474181374d1b00e2d4f0e1e893bdb3977fb05' \
-            "$LEGACY_SEPOLICY" | sha256sum --check --strict -
-          cp "$LEGACY_SEPOLICY" drivers/kernelsu/selinux/sepolicy.c
-
-          python3 ../patch_access_ok.py
-          python3 ../patch_compat.py
-          python3 ../patch_file_wrapper.py
-
-          grep -qFx 'obj-y += kernelsu/' drivers/Makefile || \
-            printf '%s\n' 'obj-y += kernelsu/' >> drivers/Makefile
+          grep -qF 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || \
+            printf '%s\n' 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || \
             sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 
@@ -123,7 +106,8 @@ jobs:
         run: |
           set -euxo pipefail
           cd kernel-source
-          git clone --depth=1 https://github.com/devnoname120/kernelsu-coccinelle.git
+          git clone "$KSU_HOOKS_REPO" kernelsu-coccinelle
+          git -C kernelsu-coccinelle checkout --detach "$KSU_HOOKS_COMMIT"
           ./kernelsu-coccinelle/classic-hooks/apply.sh .
           rm -rf kernelsu-coccinelle
 
@@ -131,6 +115,14 @@ jobs:
 
           # A manual-hook kernel must never accidentally enable a kprobe hook alias.
           test "$(grep -RIl 'KernelSU: Manual hooks are incompatible' drivers/input/input.c | wc -l)" -eq 1
+          grep -q 'ksu_handle_devpts' fs/devpts/inode.c
+          grep -q 'ksu_handle_execveat' fs/exec.c
+          grep -q 'ksu_handle_faccessat' fs/open.c
+          grep -q 'ksu_handle_input_handle_event' drivers/input/input.c
+          grep -q 'ksu_handle_vfs_read' fs/read_write.c
+          grep -q 'ksu_handle_stat' fs/stat.c
+          grep -q '^int path_umount' fs/namespace.c
+          grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
 
       - name: Configure davinci kernel
         run: |
@@ -140,10 +132,9 @@ jobs:
           test -f "arch/arm64/configs/$DEFCONFIG"
           test -f arch/arm64/configs/vendor/davinci.config
 
-          cat > /tmp/sukisu.config <<'EOF'
+          cat > /tmp/kernelsu-next.config <<'EOF'
           CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_SU=y
-          # CONFIG_KPM is not set
+          CONFIG_KSU_MANUAL_HOOK=y
           # CONFIG_KPROBES is not set
           # CONFIG_KSU_KPROBES_HOOK is not set
           # CONFIG_KSU_HOOK_KPROBES is not set
@@ -156,13 +147,13 @@ jobs:
           scripts/kconfig/merge_config.sh -m -O out \
             "arch/arm64/configs/$DEFCONFIG" \
             arch/arm64/configs/vendor/davinci.config \
-            /tmp/sukisu.config
+            /tmp/kernelsu-next.config
 
           export PATH="$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH"
-          make O=out ARCH=arm64 CC=clang \
-            KSU_VERSION_FULL="$SUKISU_VERSION_FULL" olddefconfig
+          make O=out ARCH=arm64 CC=clang olddefconfig
 
           grep -qx 'CONFIG_KSU=y' out/.config
+          grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
           grep -qx 'CONFIG_MACH_XIAOMI_DAVINCI=y' out/.config
           if grep -Eq '^CONFIG_(KPROBES|KSU_KPROBES_HOOK|KSU_HOOK_KPROBES|KSU_WITH_KPROBES)=y$' out/.config; then
             echo 'error: a kprobe hook was enabled together with manual hooks' >&2
@@ -191,7 +182,6 @@ jobs:
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            KSU_VERSION_FULL="$SUKISU_VERSION_FULL" \
             $TARGETS 2>&1 | tee ../build.log
 
           test -s out/arch/arm64/boot/Image.gz
@@ -227,17 +217,17 @@ jobs:
             -exec cp -t AnyKernel3/modules/vendor/lib/modules {} +
 
           cd AnyKernel3
-          zip -r9 ../AnyKernel3-davinci-SukiSU-Ultra.zip . \
+          zip -r9 ../AnyKernel3-davinci-KernelSU-Next.zip . \
             -x '.git/*' 'README.md'
           cd ..
-          test -s AnyKernel3-davinci-SukiSU-Ultra.zip
+          test -s AnyKernel3-davinci-KernelSU-Next.zip
 
       - name: Collect build outputs
         if: success()
         run: |
           set -euxo pipefail
           mkdir -p release
-          cp AnyKernel3-davinci-SukiSU-Ultra.zip release/
+          cp AnyKernel3-davinci-KernelSU-Next.zip release/
           cp kernel-source/out/arch/arm64/boot/Image.gz release/
           cp kernel-source/out/.config release/kernel.config
           cp build-info.txt release/
@@ -250,7 +240,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: davinci-LineageOS-${{ inputs.kernel_ref }}-SukiSU-Ultra
+          name: davinci-LineageOS-${{ inputs.kernel_ref }}-KernelSU-Next
           path: release/
           if-no-files-found: error
           retention-days: 30
