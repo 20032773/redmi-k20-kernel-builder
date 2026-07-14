@@ -35,6 +35,10 @@ jobs:
           mv drivers/kernelsu_tmp/uapi drivers/kernelsu/uapi
           rm -rf drivers/kernelsu_tmp
           
+          # Create linux/pgtable.h wrapper for compatibility with Linux < 5.8
+          mkdir -p include/linux
+          echo '#include <asm/pgtable.h>' > include/linux/pgtable.h
+          
           # Remove KPROBES dependency from SukiSU-Ultra Kconfig to allow compiling manual hook mode on non-KPROBES kernels
           sed -i 's/depends on KPROBES \&\& EXT4_FS/depends on EXT4_FS/' drivers/kernelsu/Kconfig
           
