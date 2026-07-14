@@ -31,6 +31,8 @@ jobs:
           git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b main --depth=1 drivers/kernelsu_tmp
           # Move the actual kernel driver directory to drivers/kernelsu
           mv drivers/kernelsu_tmp/kernel drivers/kernelsu
+          # Copy the uapi folder to drivers/kernelsu/uapi so the compiler can find 'uapi/supercall.h'
+          mv drivers/kernelsu_tmp/uapi drivers/kernelsu/uapi
           rm -rf drivers/kernelsu_tmp
           
           # Remove KPROBES dependency from SukiSU-Ultra Kconfig to allow compiling manual hook mode on non-KPROBES kernels
