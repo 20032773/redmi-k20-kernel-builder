@@ -682,7 +682,7 @@ legacy_apply = r'''void apply_kernelsu_rules()
 
 rules, count = re.subn(
     r"void apply_kernelsu_rules\(\)\n\{.*?\n\}\n\n#define KSU_SEPOLICY_MAX_BATCH_SIZE",
-    legacy_apply + "\n#define KSU_SEPOLICY_MAX_BATCH_SIZE",
+    lambda _match: legacy_apply + "\n#define KSU_SEPOLICY_MAX_BATCH_SIZE",
     rules,
     count=1,
     flags=re.S,
@@ -758,7 +758,7 @@ out_free:
 '''
 rules, count = re.subn(
     r"int handle_sepolicy\(void __user \*user_data, u64 data_len\)\n\{.*?\n\}\s*$",
-    legacy_handle,
+    lambda _match: legacy_handle,
     rules,
     count=1,
     flags=re.S,
@@ -791,7 +791,7 @@ struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
 '''
 sepolicy_c, count = re.subn(
     r"void ksu_destroy_sepolicy\(struct selinux_policy \*pol\)\n\{.*?\n\}\s*$",
-    legacy_snapshot_stubs,
+    lambda _match: legacy_snapshot_stubs,
     sepolicy_c,
     count=1,
     flags=re.S,
