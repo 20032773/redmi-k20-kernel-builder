@@ -42,6 +42,8 @@ typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 
 /* Compatibility for copy_from_user_nofault in Linux < 5.8 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+#ifndef _KSU_COPY_FROM_USER_NOFAULT
+#define _KSU_COPY_FROM_USER_NOFAULT
 static inline long copy_from_user_nofault(void *to, const void __user *from, unsigned long size)
 {
     long ret;
@@ -54,18 +56,25 @@ static inline long copy_from_user_nofault(void *to, const void __user *from, uns
     return ret;
 }
 #endif
+#endif
 """
 
-# Append before #endif at the end if it exists, otherwise append at the end
-if "#endif" in compat_content:
-    parts = compat_content.rsplit("#endif", 1)
-    new_compat = parts[0] + compat_addition + "\n#endif" + parts[1]
+# Insert compat_addition at the top of the file (right after <linux/version.h>) to ensure it is defined before usage
+if "#include <linux/version.h>" in compat_content:
+    new_compat = compat_content.replace(
+        "#include <linux/version.h>",
+        "#include <linux/version.h>\n" + compat_addition
+    )
 else:
-    new_compat = compat_content + "\n" + compat_addition
+    # Fallback to inserting after the header definition
+    new_compat = compat_content.replace(
+        "#define __KSU_H_KERNEL_COMPAT",
+        "#define __KSU_H_KERNEL_COMPAT\n" + compat_addition
+    )
 
 with open(compat_path, "w", encoding="utf-8") as f:
     f.write(new_compat)
-print("Updated kernel_compat.h with uaccess.h and compat macros")
+print("Updated kernel_compat.h with top-level compatibility layer")
 
 # 2. Update Kbuild to force-include kernel_compat.h in all compilations
 kbuild_path = os.path.join(ksu_dir, "Kbuild")
