@@ -475,7 +475,7 @@ static long ksu_sys_setns(int fd, int flags)
 ###############################################################################
 # 5. PATCH remaining filesystem APIs used only by late KSU objects
 ###############################################################################
-print("[5/9] Backporting fsnotify and umount APIs ...")
+print("[5/9] Backporting late-object filesystem and seccomp APIs ...")
 
 umount_path = os.path.join(ksu_dir, "feature", "kernel_umount.c")
 umount_src = read_file(umount_path)
@@ -556,6 +556,43 @@ observer = observer.replace(modern_observer, legacy_observer, 1)
 observer = observer.replace("fsnotify_add_inode_mark(m, inode, 0)",
                             "fsnotify_add_mark(m, inode, NULL, 0)")
 write_file(observer_path, observer)
+
+app_profile_path = os.path.join(ksu_dir, "policy", "app_profile.c")
+app_profile = read_file(app_profile_path)
+
+# filter_count was added in Linux 5.9.  Older kernels only maintain the
+# filter pointer and expose put_seccomp_filter() for dropping its reference.
+old_release_decl = "void seccomp_filter_release(struct task_struct *tsk);\n"
+if old_release_decl not in app_profile:
+    print("Error: unexpected SukiSU seccomp release declaration")
+    exit(1)
+app_profile = app_profile.replace(
+    old_release_decl,
+    "/* Linux 4.14 declares put_seccomp_filter() in linux/seccomp.h. */\n",
+    1,
+)
+
+old_filter_count = "    atomic_set(&current->seccomp.filter_count, 0);\n"
+if old_filter_count not in app_profile:
+    print("Error: unexpected SukiSU seccomp filter_count reset")
+    exit(1)
+app_profile = app_profile.replace(
+    old_filter_count,
+    "#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)\n"
+    "    atomic_set(&current->seccomp.filter_count, 0);\n"
+    "#endif\n",
+    1,
+)
+
+if "    seccomp_filter_release(fake);\n" not in app_profile:
+    print("Error: unexpected SukiSU seccomp release call")
+    exit(1)
+app_profile = app_profile.replace(
+    "    seccomp_filter_release(fake);\n",
+    "    put_seccomp_filter(fake);\n",
+    1,
+)
+write_file(app_profile_path, app_profile)
 
 ###############################################################################
 # 6. PATCH SELinux integration - Linux 4.14 uses selinux_state.ss
@@ -859,6 +896,7 @@ Summary of changes:
   5. Late filesystem APIs:
      - Modern fsnotify callback/add-mark -> Linux 4.14 equivalents
      - path_umount -> scoped sys_umount fallback
+     - Guard seccomp filter_count and use 4.14 put_seccomp_filter
 
   6. SELinux 4.14     - Uses the legacy selinux_state.ss live policy model
      - Preserves root and live sepolicy rule support

@@ -68,7 +68,8 @@ bitmap 尺寸，讓 64-bit 與 32-bit 應用都使用正確的 syscall 範圍。
 KernelSU 過去支援 non-GKI 核心的 live-policy 模式，保留 root 與動態 sepolicy
 規則；只有依賴新版 policy snapshot 的選用功能「隱藏 SELinux 修改」會停用。
 另外也會回補舊式 fsnotify callback、`sys_umount()` 與 task-work 通知模式，
-避免這些較晚編譯或最終連結階段才出現的錯誤。
+並使用 4.14 的 `put_seccomp_filter()` 釋放 seccomp filter；避免這些較晚編譯
+或最終連結階段才出現的錯誤。
 
 ## SUSFS 狀態
 
