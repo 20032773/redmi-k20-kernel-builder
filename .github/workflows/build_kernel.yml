@@ -87,11 +87,11 @@ jobs:
               echo "[!] davinci.config not found in vendor configs."
           fi
           
-          # Append SukiSU-Ultra & SUSFS configs
+          # Append SukiSU-Ultra & SUSFS configs (Disable KPM to avoid Linux 4.14 struct task_struct member incompatibility)
           echo "CONFIG_KSU=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_KPM=y" >> "$DEFCONFIG_FILE"
+          echo "CONFIG_KPM=n" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KALLSYMS=y" >> "$DEFCONFIG_FILE"
           echo "CONFIG_KALLSYMS_ALL=y" >> "$DEFCONFIG_FILE"
           
