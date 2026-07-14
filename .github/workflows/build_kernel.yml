@@ -41,6 +41,9 @@ jobs:
           # Run python patch script to resolve access_ok compatibility for Linux < 5.0
           python3 ../patch_access_ok.py
           
+          # Run python patch script to inject standard 4.14 compatibility macros (MODULE_IMPORT_NS, syscall_fn_t)
+          python3 ../patch_compat.py
+          
           # Configure Makefile and Kconfig
           echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
