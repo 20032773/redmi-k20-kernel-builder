@@ -61,6 +61,13 @@ typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 #endif
 #endif
 
+/* Compatibility for __flush_icache_range in Linux < 4.19 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
+#ifndef __flush_icache_range
+#define __flush_icache_range flush_icache_range
+#endif
+#endif
+
 /* Compatibility for copy_from_user_nofault in Linux < 5.8 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 #ifndef _KSU_COPY_FROM_USER_NOFAULT
@@ -75,6 +82,13 @@ static inline long copy_from_user_nofault(void *to, const void __user *from, uns
     pagefault_enable();
     set_fs(old_fs);
     return ret;
+}
+#endif
+#ifndef _KSU_COPY_TO_KERNEL_NOFAULT
+#define _KSU_COPY_TO_KERNEL_NOFAULT
+static inline long copy_to_kernel_nofault(void *dst, const void *src, size_t size)
+{
+    return probe_kernel_write(dst, src, size);
 }
 #endif
 #endif
