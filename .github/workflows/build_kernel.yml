@@ -97,6 +97,8 @@ jobs:
           # This vendor 4.14 tree has asm/pgtable.h but no linux/pgtable.h.
           printf '%s\n' '#include <asm/pgtable.h>' > include/linux/pgtable.h
 
+          python3 ../patch_ksun_legacy.py
+
           grep -qF 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || \
             printf '%s\n' 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
           grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || \

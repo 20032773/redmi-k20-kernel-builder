@@ -40,6 +40,8 @@ workflow 的預設 commit 更新成該次 `build-info.txt` 記錄的 `ksun_commi
   `9e30076418813fc7eaab6481da2e745dfde56249`，避免上游變動造成不可重現的建置。
 - `patch_manual_hooks.py` 補上 vendor Linux 4.14 所需的 namespace 宣告，以及
   KernelSU Next supercall 使用的 reboot hook；插入點不符合預期時會直接停止建置。
+- `patch_ksun_legacy.py` 修正 SULog 在 Linux 4.14 的 boottime `timespec` 型別，
+  並處理此 vendor kernel 已回移 `__poll_t` 所造成的重複 typedef。
 - SUSFS 目前未啟用。先確認核心可編譯、可開機且 root/模組正常，再另外移植。
 
 ## DTBO 與刷入安全
