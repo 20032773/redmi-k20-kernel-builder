@@ -55,6 +55,10 @@ fastboot/recovery 並理解還原方法後，才另外測試 `dtbo-davinci.img`�
 缺少的 `fs/namespace.c` forward declarations，避免 `path_umount()` 因呼叫
 後方 static helper 而產生隱式宣告錯誤。
 
+`patch_compat.py` 也會將 arm64 4.14 的 `NR_syscalls` 與
+`__NR_compat_syscalls` 對應到新版 SukiSU seccomp cache 使用的 native/compat
+bitmap 尺寸，讓 64-bit 與 32-bit 應用都使用正確的 syscall 範圍。
+
 ## SUSFS 狀態
 
 目前流程先不啟用 SUSFS。舊流程只套用了 `susfs4ksu` 的核心檔案系統 patch，

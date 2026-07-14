@@ -43,7 +43,9 @@ write_file(compat_path, '''#ifndef __KSU_H_KERNEL_COMPAT_REAL
 #include <linux/version.h>
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
+#include <linux/audit.h>
 #include <asm/pgtable.h>
+#include <asm/unistd.h>
 
 /*=============================================================================
  * COMPREHENSIVE COMPATIBILITY LAYER FOR LINUX 4.14.x
@@ -177,6 +179,19 @@ typedef pgd_t p4d_t;
 #endif
 #endif
 
+/* --- seccomp action-cache sizes: added to arm64 after Linux 4.14 --- */
+#ifndef SECCOMP_ARCH_NATIVE_NR
+#define SECCOMP_ARCH_NATIVE_NR NR_syscalls
+#endif
+#ifdef CONFIG_COMPAT
+#ifndef SECCOMP_ARCH_COMPAT
+#define SECCOMP_ARCH_COMPAT AUDIT_ARCH_ARM
+#endif
+#ifndef SECCOMP_ARCH_COMPAT_NR
+#define SECCOMP_ARCH_COMPAT_NR __NR_compat_syscalls
+#endif
+#endif
+
 /* --- Original ksu_copy_from_user_retry from SukiSU --- */
 static inline int ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
 {
@@ -278,7 +293,6 @@ struct patch_text_info {
 static int ksu_patch_text_nosync(void *dst, void *src, size_t len, int flags)
 {
     int ret;
-    unsigned long irq_flags;
 
     pr_debug("patch dst=0x%lx src=0x%lx len=%ld\n", (unsigned long)dst, (unsigned long)src, len);
 
@@ -424,6 +438,7 @@ Summary of changes:
      - p4d fold-through-pgd stubs (5-level page table compat)
      - __pte_to_phys, __pud_to_phys, __pmd_to_phys
      - path_mount -> do_mount fallback
+     - SECCOMP_ARCH_NATIVE_NR / COMPAT_NR syscall bitmap sizes
      - Header guard collision fix (renamed guard macro)
 
   2. patch_memory.c   - Complete rewrite for 4.14 compatibility:
