@@ -54,14 +54,3 @@ LineageOS davinci 使用獨立 DTBO 分區。AnyKernel ZIP 只替換 boot 裡的
 第一次測試建議只刷 AnyKernel ZIP。只有在已備份原始 DTBO、確認可進入
 fastboot/recovery 並知道如何還原後，才另外測試 `dtbo-davinci.img`。不同 ROM
 或 firmware 的 DTBO 不一定能互換。
-
-## 失敗診斷
-
-如果編譯失敗，workflow 會上傳 `davinci-build-failure-diagnostics`，可能包含：
-
-- `build.log`
-- `build-info.txt`
-- 核心 `.config`
-- patch reject (`.rej`) 檔案
-
-把新的 Actions log 或失敗診斷 artifact 放進 `D:\googleAI\logs`，即可繼續定位。
