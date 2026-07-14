@@ -2,143 +2,254 @@ name: Build Redmi K20 Kernel
 
 on:
   workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: LineageOS kernel branch/tag/commit
+        required: true
+        default: lineage-23.2
+        type: string
+      sukisu_ref:
+        description: SukiSU tag/branch; use "latest" for the newest stable release
+        required: true
+        default: latest
+        type: string
+      build_dtbo:
+        description: Build a separate davinci dtbo.img artifact
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: redmi-k20-kernel-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  KERNEL_REPO: https://github.com/LineageOS/android_kernel_xiaomi_sm6150.git
+  SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  DEFCONFIG: vendor/sdmsteppe-perf_defconfig
 
 jobs:
   build:
     name: Build Kernel for Redmi K20 (davinci)
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
     steps:
-      - name: Checkout Config Repository
+      - name: Checkout builder repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install build dependencies
         run: |
+          set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex git gnupg gperf libncurses5-dev libssl-dev libxml2 rsync zip lzop coccinelle
+          sudo apt-get install -y \
+            bc bison build-essential ccache coccinelle curl device-tree-compiler \
+            flex git libncurses5-dev libssl-dev libxml2 lzop python3 rsync zip
 
-      - name: Clone Proton Clang Toolchain
+      - name: Clone toolchain and kernel
+        env:
+          KERNEL_REF: ${{ inputs.kernel_ref }}
         run: |
-          git clone https://github.com/kdrag0n/proton-clang.git --depth=1 clang-toolchain
+          set -euxo pipefail
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang-toolchain
+          git clone --depth=1 --branch "$KERNEL_REF" "$KERNEL_REPO" kernel-source
+          {
+            echo "kernel_ref=$KERNEL_REF"
+            echo "kernel_commit=$(git -C kernel-source rev-parse HEAD)"
+          } > build-info.txt
 
-      - name: Clone Kernel Source
+      - name: Integrate latest stable SukiSU Ultra
+        env:
+          REQUESTED_SUKISU_REF: ${{ inputs.sukisu_ref }}
         run: |
-          git clone https://github.com/LineageOS/android_kernel_xiaomi_sm6150.git -b lineage-23.2 --depth=1 kernel-source
+          set -euxo pipefail
 
-      - name: Integrate SukiSU-Ultra
-        run: |
+          SUKISU_REF="$REQUESTED_SUKISU_REF"
+          if [ "$SUKISU_REF" = "latest" ]; then
+            SUKISU_REF="$(
+              curl -fsSL https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest |
+                python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])'
+            )"
+          fi
+          test -n "$SUKISU_REF"
+
+          git clone --depth=1 --branch "$SUKISU_REF" "$SUKISU_REPO" sukisu-source
+          SUKISU_COMMIT="$(git -C sukisu-source rev-parse HEAD)"
+          SUKISU_VERSION_FULL="v${SUKISU_REF#v}-${SUKISU_COMMIT:0:8}@${SUKISU_REF}"
+          {
+            echo "sukisu_ref=$SUKISU_REF"
+            echo "sukisu_commit=$SUKISU_COMMIT"
+            echo "sukisu_version_full=$SUKISU_VERSION_FULL"
+          } >> build-info.txt
+          echo "SUKISU_VERSION_FULL=$SUKISU_VERSION_FULL" >> "$GITHUB_ENV"
+
           cd kernel-source
-          # Clone SukiSU-Ultra to a temporary folder
-          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b main --depth=1 drivers/kernelsu_tmp
-          # Move the actual kernel driver directory to drivers/kernelsu
-          mv drivers/kernelsu_tmp/kernel drivers/kernelsu
-          # Copy the uapi folder to drivers/kernelsu/uapi so the compiler can find 'uapi/supercall.h'
-          mv drivers/kernelsu_tmp/uapi drivers/kernelsu/uapi
-          rm -rf drivers/kernelsu_tmp
-          
-          # Create linux/pgtable.h wrapper for compatibility with Linux < 5.8
-          mkdir -p include/linux
-          echo '#include <asm/pgtable.h>' > include/linux/pgtable.h
-          
-          # Remove KPROBES dependency from SukiSU-Ultra Kconfig to allow compiling manual hook mode on non-KPROBES kernels
+          mv ../sukisu-source/kernel drivers/kernelsu
+          mv ../sukisu-source/uapi drivers/kernelsu/uapi
+          rm -rf ../sukisu-source
+
+          # Linux 4.14 has asm/pgtable.h, while current SukiSU includes linux/pgtable.h.
+          printf '%s\n' '#include <asm/pgtable.h>' > include/linux/pgtable.h
+
+          # Manual hooks are installed in the next step, so KSU must not depend on kprobes.
           sed -i 's/depends on KPROBES \&\& EXT4_FS/depends on EXT4_FS/' drivers/kernelsu/Kconfig
-          
-          # Run python patch script to resolve access_ok compatibility for Linux < 5.0
-          python3 ../patch_access_ok.py
-          
-          # Run python patch script to inject standard 4.14 compatibility macros (MODULE_IMPORT_NS, syscall_fn_t)
-          python3 ../patch_compat.py
-          
-          # Configure Makefile and Kconfig
-          echo "obj-y += kernelsu/" >> drivers/Makefile
-          grep -q "kernelsu" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          grep -q 'depends on EXT4_FS' drivers/kernelsu/Kconfig
 
-      - name: Apply KernelSU Manual Hooks (Coccinelle)
+          python3 ../patch_access_ok.py
+          python3 ../patch_compat.py
+          python3 ../patch_file_wrapper.py
+
+          grep -qFx 'obj-y += kernelsu/' drivers/Makefile || \
+            printf '%s\n' 'obj-y += kernelsu/' >> drivers/Makefile
+          grep -q 'drivers/kernelsu/Kconfig' drivers/Kconfig || \
+            sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+      - name: Apply KernelSU manual hooks
         run: |
+          set -euxo pipefail
           cd kernel-source
-          git clone https://github.com/devnoname120/kernelsu-coccinelle.git --depth=1
-          cd kernelsu-coccinelle/classic-hooks
-          ./apply.sh ../..
-          cd ../..
+          git clone --depth=1 https://github.com/devnoname120/kernelsu-coccinelle.git
+          ./kernelsu-coccinelle/classic-hooks/apply.sh .
           rm -rf kernelsu-coccinelle
 
-      - name: Integrate SUSFS
-        run: |
-          cd kernel-source
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 --depth=1
-          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
-          # Apply patch with --fuzz=0 to prevent patch from corrupting files by misapplying hunks
-          patch --fuzz=0 -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.14.patch || true
-          python3 ../patch_susfs_rejects.py
-          rm -rf susfs4ksu
+          # A manual-hook kernel must never accidentally enable a kprobe hook alias.
+          test "$(grep -RIl 'KernelSU: Manual hooks are incompatible' drivers/input/input.c | wc -l)" -eq 1
 
-      - name: Configure defconfig
+      - name: Configure davinci kernel
         run: |
+          set -euxo pipefail
           cd kernel-source
-          # Dynamically find the sdmsteppe-perf_defconfig or fallback to any perf_defconfig
-          DEFCONFIG_FILE="arch/arm64/configs/vendor/sdmsteppe-perf_defconfig"
-          if [ ! -f "$DEFCONFIG_FILE" ]; then
-              DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*sdmsteppe-perf_defconfig" -print -quit)
-              if [ -z "$DEFCONFIG_FILE" ]; then
-                  DEFCONFIG_FILE=$(find arch/arm64/configs/ -name "*perf_defconfig" -print -quit)
-              fi
-          fi
-          echo "Found defconfig: $DEFCONFIG_FILE"
-          
-          # Append davinci-specific config fragment (davinci.config) to enable davinci-specific drivers (touchscreen, compass, fingerprint etc.)
-          DAVINCI_CONFIG="arch/arm64/configs/vendor/davinci.config"
-          if [ -f "$DAVINCI_CONFIG" ]; then
-              echo "[+] Appending davinci.config to defconfig..."
-              cat "$DAVINCI_CONFIG" >> "$DEFCONFIG_FILE"
-          else
-              echo "[!] davinci.config not found in vendor configs."
-          fi
-          
-          # Append SukiSU-Ultra & SUSFS configs (Disable KPM to avoid Linux 4.14 struct task_struct member incompatibility)
-          echo "CONFIG_KSU=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_KPM=n" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_KALLSYMS=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_KALLSYMS_ALL=y" >> "$DEFCONFIG_FILE"
-          
-          # Save the defconfig name for the build step
-          DEFCONFIG_NAME=$(echo "$DEFCONFIG_FILE" | sed 's|arch/arm64/configs/||')
-          echo "DEFCONFIG_NAME=$DEFCONFIG_NAME" >> $GITHUB_ENV
 
-      - name: Build Kernel
+          test -f "arch/arm64/configs/$DEFCONFIG"
+          test -f arch/arm64/configs/vendor/davinci.config
+
+          cat > /tmp/sukisu.config <<'EOF'
+          CONFIG_KSU=y
+          CONFIG_KSU_MANUAL_SU=y
+          # CONFIG_KPM is not set
+          # CONFIG_KPROBES is not set
+          # CONFIG_KSU_KPROBES_HOOK is not set
+          # CONFIG_KSU_HOOK_KPROBES is not set
+          # CONFIG_KSU_WITH_KPROBES is not set
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
+          EOF
+
+          mkdir -p out
+          scripts/kconfig/merge_config.sh -m -O out \
+            "arch/arm64/configs/$DEFCONFIG" \
+            arch/arm64/configs/vendor/davinci.config \
+            /tmp/sukisu.config
+
+          export PATH="$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH"
+          make O=out ARCH=arm64 CC=clang \
+            KSU_VERSION_FULL="$SUKISU_VERSION_FULL" olddefconfig
+
+          grep -qx 'CONFIG_KSU=y' out/.config
+          grep -qx 'CONFIG_MACH_XIAOMI_DAVINCI=y' out/.config
+          if grep -Eq '^CONFIG_(KPROBES|KSU_KPROBES_HOOK|KSU_HOOK_KPROBES|KSU_WITH_KPROBES)=y$' out/.config; then
+            echo 'error: a kprobe hook was enabled together with manual hooks' >&2
+            exit 1
+          fi
+
+      - name: Build kernel, modules, and device trees
+        env:
+          BUILD_DTBO: ${{ inputs.build_dtbo }}
         run: |
+          set -euxo pipefail
           cd kernel-source
-          
-          # Remove broken/unrelated sa6155 dtb targets from Makefile to prevent compilation crash
+
+          # These automotive DTBs are unrelated to davinci and are broken in this tree.
           sed -i '/sa6155/d' arch/arm64/boot/dts/qcom/Makefile
-          
-          export PATH=$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH
-          make O=out ARCH=arm64 $DEFCONFIG_NAME
-          
-          # Compile Image.gz-dtb and modules (which builds the kernel modules)
-          make -j$(nproc) O=out ARCH=arm64 \
+
+          export PATH="$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH"
+          # LineageOS davinci uses BOARD_KERNEL_SEPARATED_DTBO := true.
+          # Keep the boot kernel and dtbo partition image separate.
+          TARGETS='Image.gz modules'
+          if [ "$BUILD_DTBO" = 'true' ]; then
+            TARGETS="$TARGETS dtbs"
+          fi
+
+          make -j"$(nproc)" O=out ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            Image.gz-dtb modules
+            KSU_VERSION_FULL="$SUKISU_VERSION_FULL" \
+            $TARGETS 2>&1 | tee ../build.log
+
+          test -s out/arch/arm64/boot/Image.gz
+
+      - name: Create davinci DTBO image
+        if: ${{ inputs.build_dtbo }}
+        run: |
+          set -euxo pipefail
+          DTBO_DIR=kernel-source/out/arch/arm64/boot/dts/qcom
+          DTBO_FILES=(
+            "$DTBO_DIR/davinci-sdmmagpie-overlay.dtbo"
+            "$DTBO_DIR/davinci_m0a-sdmmagpie-overlay.dtbo"
+            "$DTBO_DIR/davinci_m0b-sdmmagpie-overlay.dtbo"
+          )
+          for file in "${DTBO_FILES[@]}"; do
+            test -s "$file"
+          done
+
+          python3 mkdtboimg.py create dtbo-davinci.img \
+            --page_size=4096 "${DTBO_FILES[@]}"
+          test -s dtbo-davinci.img
+          python3 mkdtboimg.py dump dtbo-davinci.img > dtbo-info.txt
 
       - name: Pack AnyKernel3 flashable ZIP
         run: |
-          git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          cp kernel-source/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          
-          # Copy compiled kernel modules (.ko files) if any exist
-          echo "[*] Searching and copying compiled modules..."
-          mkdir -p AnyKernel3/modules/vendor/lib/modules
-          find kernel-source/out/ -name "*.ko" -exec cp {} AnyKernel3/modules/vendor/lib/modules/ \;
-          
+          set -euxo pipefail
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+          cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3/
           cp anykernel.sh AnyKernel3/anykernel.sh
-          cd AnyKernel3
-          zip -r9 ../AnyKernel3-davinci-SukiSU-Ultra.zip * -x .git* README.md
 
-      - name: Upload Flashable ZIP Artifact
+          mkdir -p AnyKernel3/modules/vendor/lib/modules
+          find kernel-source/out -type f -name '*.ko' \
+            -exec cp -t AnyKernel3/modules/vendor/lib/modules {} +
+
+          cd AnyKernel3
+          zip -r9 ../AnyKernel3-davinci-SukiSU-Ultra.zip . \
+            -x '.git/*' 'README.md'
+          cd ..
+          test -s AnyKernel3-davinci-SukiSU-Ultra.zip
+
+      - name: Collect build outputs
+        if: success()
+        run: |
+          set -euxo pipefail
+          mkdir -p release
+          cp AnyKernel3-davinci-SukiSU-Ultra.zip release/
+          cp kernel-source/out/arch/arm64/boot/Image.gz release/
+          cp kernel-source/out/.config release/kernel.config
+          cp build-info.txt release/
+          if [ -f dtbo-davinci.img ]; then
+            cp dtbo-davinci.img dtbo-info.txt release/
+          fi
+          sha256sum release/* > release/SHA256SUMS
+
+      - name: Upload flashable build
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-davinci-SukiSU-Ultra
-          path: AnyKernel3-davinci-SukiSU-Ultra.zip
+          name: davinci-LineageOS-${{ inputs.kernel_ref }}-SukiSU-Ultra
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: davinci-build-failure-diagnostics
+          path: |
+            build.log
+            build-info.txt
+            kernel-source/out/.config
+            kernel-source/**/*.rej
+          if-no-files-found: ignore
+          retention-days: 14
