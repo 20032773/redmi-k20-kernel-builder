@@ -59,11 +59,6 @@ write_file(compat_path, '''#ifndef __KSU_H_KERNEL_COMPAT_REAL
 #define MODULE_IMPORT_NS(ns)
 #endif
 
-/* --- __poll_t: file_operations.poll used unsigned int before 4.16 --- */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0)
-typedef unsigned int __poll_t;
-#endif
-
 /* --- syscall_fn_t: introduced in 4.19 for arm64 --- */
 #if defined(__aarch64__) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
 #ifndef _KSU_SYSCALL_FN_T
@@ -147,6 +142,11 @@ static inline long copy_to_user_nofault(void __user *dst, const void *src, size_
 }
 #endif
 #endif /* < 5.8 */
+
+/* --- task_work notify modes: 4.14 uses a boolean notify argument --- */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+#define TWA_RESUME true
+#endif
 
 /* --- p4d (5-level page tables): fold into pgd for 4-level kernels --- */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
@@ -857,7 +857,6 @@ Summary of changes:
      - path_mount -> do_mount with a scoped KERNEL_DS address limit
 
   5. Late filesystem APIs:
-     - __poll_t -> unsigned int
      - Modern fsnotify callback/add-mark -> Linux 4.14 equivalents
      - path_umount -> scoped sys_umount fallback
 
