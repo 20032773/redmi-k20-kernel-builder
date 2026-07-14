@@ -67,6 +67,8 @@ bitmap 尺寸，讓 64-bit 與 32-bit 應用都使用正確的 syscall 範圍。
 結構，但本裝置的 4.14 核心仍使用 `selinux_state.ss`。建置流程會改用官方
 KernelSU 過去支援 non-GKI 核心的 live-policy 模式，保留 root 與動態 sepolicy
 規則；只有依賴新版 policy snapshot 的選用功能「隱藏 SELinux 修改」會停用。
+policydb 操作引擎固定採用 KernelSU v0.9.5 的 non-GKI 實作並驗證 SHA-256，
+以配合 4.14 的 flex-array 格式；該舊實作不支援新增 `genfscon` 規則。
 另外也會回補舊式 fsnotify callback、`sys_umount()` 與 task-work 通知模式，
 並使用 4.14 的 `put_seccomp_filter()` 釋放 seccomp filter；避免這些較晚編譯
 或最終連結階段才出現的錯誤。

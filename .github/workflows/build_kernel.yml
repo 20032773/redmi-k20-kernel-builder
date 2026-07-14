@@ -98,6 +98,18 @@ jobs:
           sed -i 's/depends on KPROBES \&\& EXT4_FS/depends on EXT4_FS/' drivers/kernelsu/Kconfig
           grep -q 'depends on EXT4_FS' drivers/kernelsu/Kconfig
 
+          # SukiSU 4.1.x sepolicy.c assumes modern SELinux policydb layouts.
+          # Redmi K20's 4.14 tree still uses the legacy flex-array layout, so
+          # use KernelSU's last officially supported non-GKI implementation.
+          LEGACY_SEPOLICY=/tmp/kernelsu-v0.9.5-sepolicy.c
+          curl --fail --location --silent --show-error \
+            https://raw.githubusercontent.com/tiann/KernelSU/v0.9.5/kernel/selinux/sepolicy.c \
+            --output "$LEGACY_SEPOLICY"
+          printf '%s  %s\n' \
+            '6c57a7ee92ae784d851125d5375474181374d1b00e2d4f0e1e893bdb3977fb05' \
+            "$LEGACY_SEPOLICY" | sha256sum --check --strict -
+          cp "$LEGACY_SEPOLICY" drivers/kernelsu/selinux/sepolicy.c
+
           python3 ../patch_access_ok.py
           python3 ../patch_compat.py
           python3 ../patch_file_wrapper.py

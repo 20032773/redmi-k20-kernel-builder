@@ -774,6 +774,9 @@ write_file(rules_path, rules)
 # helpers and avoid compiling modern struct member accesses.
 sepolicy_c_path = os.path.join(ksu_dir, "selinux", "sepolicy.c")
 sepolicy_c = read_file(sepolicy_c_path)
+# KernelSU v0.9.5 kept klog.h at the kernel root; current SukiSU keeps it in
+# kernel/include, which is already on the Kbuild include path.
+sepolicy_c = sepolicy_c.replace('#include "../klog.h"', '#include "klog.h"')
 if "#include <linux/err.h>" not in sepolicy_c:
     sepolicy_c = sepolicy_c.replace(
         "#include <linux/gfp.h>\n", "#include <linux/err.h>\n#include <linux/gfp.h>\n", 1
@@ -789,16 +792,21 @@ struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
     return ERR_PTR(-EOPNOTSUPP);
 }
 '''
-sepolicy_c, count = re.subn(
-    r"void ksu_destroy_sepolicy\(struct selinux_policy \*pol\)\n\{.*?\n\}\s*$",
-    lambda _match: legacy_snapshot_stubs,
-    sepolicy_c,
-    count=1,
-    flags=re.S,
-)
-if count != 1:
-    print("Error: unexpected SukiSU policy snapshot implementation")
-    exit(1)
+if "void ksu_destroy_sepolicy(struct selinux_policy *pol)" in sepolicy_c:
+    sepolicy_c, count = re.subn(
+        r"void ksu_destroy_sepolicy\(struct selinux_policy \*pol\)\n\{.*?\n\}\s*$",
+        lambda _match: legacy_snapshot_stubs,
+        sepolicy_c,
+        count=1,
+        flags=re.S,
+    )
+    if count != 1:
+        print("Error: unexpected SukiSU policy snapshot implementation")
+        exit(1)
+else:
+    # The pinned v0.9.5 non-GKI engine predates policy snapshots.  Current
+    # SukiSU still declares these internal helpers, so provide unused stubs.
+    sepolicy_c = sepolicy_c.rstrip() + "\n\n" + legacy_snapshot_stubs
 write_file(sepolicy_c_path, sepolicy_c)
 
 # The SELinux-hide feature relies on modern policy snapshots and status fields.
