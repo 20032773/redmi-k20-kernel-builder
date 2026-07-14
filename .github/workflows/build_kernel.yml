@@ -31,6 +31,8 @@ env:
   KSUN_REPO: https://github.com/KernelSU-Next/KernelSU-Next.git
   KSU_HOOKS_REPO: https://github.com/devnoname120/kernelsu-coccinelle.git
   KSU_HOOKS_COMMIT: 9e30076418813fc7eaab6481da2e745dfde56249
+  ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3.git
+  ANYKERNEL_COMMIT: 1c9a500dd4aa8081952523126e97eb155aed941b
   DEFCONFIG: vendor/sdmsteppe-perf_defconfig
 
 jobs:
@@ -152,6 +154,9 @@ jobs:
           cat > /tmp/kernelsu-next.config <<'EOF'
           CONFIG_KSU=y
           CONFIG_KSU_MANUAL_HOOK=y
+          # CONFIG_KSU_DEBUG is not set
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          # CONFIG_CC_OPTIMIZE_FOR_SIZE is not set
           # CONFIG_KPROBES is not set
           # CONFIG_KSU_KPROBES_HOOK is not set
           # CONFIG_KSU_HOOK_KPROBES is not set
@@ -171,6 +176,9 @@ jobs:
 
           grep -qx 'CONFIG_KSU=y' out/.config
           grep -qx 'CONFIG_KSU_MANUAL_HOOK=y' out/.config
+          grep -qx '# CONFIG_KSU_DEBUG is not set' out/.config
+          grep -qx 'CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y' out/.config
+          grep -qx '# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set' out/.config
           grep -qx 'CONFIG_MACH_XIAOMI_DAVINCI=y' out/.config
           if grep -Eq '^CONFIG_(KPROBES|KSU_KPROBES_HOOK|KSU_HOOK_KPROBES|KSU_WITH_KPROBES)=y$' out/.config; then
             echo 'error: a kprobe hook was enabled together with manual hooks' >&2
@@ -222,29 +230,63 @@ jobs:
           test -s dtbo-davinci.img
           python3 mkdtboimg.py dump dtbo-davinci.img > dtbo-info.txt
 
-      - name: Pack AnyKernel3 flashable ZIP
+      - name: Pack kernel-only and modules AnyKernel3 ZIPs
         run: |
           set -euxo pipefail
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3/
-          cp anykernel.sh AnyKernel3/anykernel.sh
+          git init AnyKernel3-base
+          git -C AnyKernel3-base remote add origin "$ANYKERNEL_REPO"
+          git -C AnyKernel3-base fetch --depth=1 origin "$ANYKERNEL_COMMIT"
+          git -C AnyKernel3-base checkout --detach FETCH_HEAD
+          test "$(git -C AnyKernel3-base rev-parse HEAD)" = "$ANYKERNEL_COMMIT"
+          echo "anykernel_commit=$ANYKERNEL_COMMIT" >> build-info.txt
 
-          mkdir -p AnyKernel3/modules/vendor/lib/modules
-          find kernel-source/out -type f -name '*.ko' \
-            -exec cp -t AnyKernel3/modules/vendor/lib/modules {} +
+          cp -a AnyKernel3-base AnyKernel3-kernel-only
+          rm -rf AnyKernel3-kernel-only/.git
+          cp kernel-source/out/arch/arm64/boot/Image.gz AnyKernel3-kernel-only/
+          cp anykernel.sh AnyKernel3-kernel-only/anykernel.sh
+          grep -qx 'do.modules=0' AnyKernel3-kernel-only/anykernel.sh
 
-          cd AnyKernel3
-          zip -r9 ../AnyKernel3-davinci-KernelSU-Next.zip . \
-            -x '.git/*' 'README.md'
-          cd ..
-          test -s AnyKernel3-davinci-KernelSU-Next.zip
+          cp -a AnyKernel3-kernel-only AnyKernel3-with-modules
+          sed -i 's/^do\.modules=0$/do.modules=1/' \
+            AnyKernel3-with-modules/anykernel.sh
+          grep -qx 'do.modules=1' AnyKernel3-with-modules/anykernel.sh
+
+          mapfile -t MODULE_FILES < <(find kernel-source/out -type f -name '*.ko' | sort)
+          test "${#MODULE_FILES[@]}" -gt 0
+          MODULE_COUNT="${#MODULE_FILES[@]}"
+          UNIQUE_MODULE_COUNT="$(printf '%s\n' "${MODULE_FILES[@]}" | sed 's#.*/##' | sort -u | wc -l)"
+          if [ "$MODULE_COUNT" -ne "$UNIQUE_MODULE_COUNT" ]; then
+            echo 'error: duplicate module basenames cannot be safely flattened' >&2
+            exit 1
+          fi
+          mkdir -p AnyKernel3-with-modules/modules/vendor/lib/modules
+          cp -t AnyKernel3-with-modules/modules/vendor/lib/modules \
+            "${MODULE_FILES[@]}"
+          echo "packaged_modules=$MODULE_COUNT" >> build-info.txt
+
+          (cd AnyKernel3-kernel-only && \
+            zip -r9 ../AnyKernel3-davinci-KernelSU-Next-kernel-only.zip . \
+              -x 'README.md')
+          (cd AnyKernel3-with-modules && \
+            zip -r9 ../AnyKernel3-davinci-KernelSU-Next-with-modules.zip . \
+              -x 'README.md')
+          test -s AnyKernel3-davinci-KernelSU-Next-kernel-only.zip
+          test -s AnyKernel3-davinci-KernelSU-Next-with-modules.zip
+
+          cp -a game-profile Redmi-K20-Game-Profile
+          chmod 0755 Redmi-K20-Game-Profile/service.sh
+          (cd Redmi-K20-Game-Profile && \
+            zip -r9 ../KernelSU-Next-Redmi-K20-Game-Profile-v1.0.0.zip .)
+          test -s KernelSU-Next-Redmi-K20-Game-Profile-v1.0.0.zip
 
       - name: Collect build outputs
         if: success()
         run: |
           set -euxo pipefail
           mkdir -p release
-          cp AnyKernel3-davinci-KernelSU-Next.zip release/
+          cp AnyKernel3-davinci-KernelSU-Next-kernel-only.zip release/
+          cp AnyKernel3-davinci-KernelSU-Next-with-modules.zip release/
+          cp KernelSU-Next-Redmi-K20-Game-Profile-v1.0.0.zip release/
           cp kernel-source/out/arch/arm64/boot/Image.gz release/
           cp kernel-source/out/.config release/kernel.config
           cp build-info.txt release/

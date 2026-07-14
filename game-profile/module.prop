@@ -1,0 +1,6 @@
+id=davinci_game_profile
+name=Redmi K20 Sustained Game Profile
+version=1.0.0
+versionCode=100
+author=redmi-k20-kernel-builder
+description=Optional no-overclock profile: transient scheduler boost and one-step GPU minimum-frequency boost while selected games run.
