@@ -115,6 +115,8 @@ jobs:
           ./kernelsu-coccinelle/classic-hooks/apply.sh .
           rm -rf kernelsu-coccinelle
 
+          python3 ../patch_manual_hooks.py
+
           # A manual-hook kernel must never accidentally enable a kprobe hook alias.
           test "$(grep -RIl 'KernelSU: Manual hooks are incompatible' drivers/input/input.c | wc -l)" -eq 1
 

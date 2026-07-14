@@ -51,6 +51,10 @@ fastboot/recovery 並理解還原方法後，才另外測試 `dtbo-davinci.img`�
 相容修補器採嚴格模式；如果新版 SukiSU 改動了被修補的程式碼，workflow 會
 在整合階段清楚失敗，而不是繼續產生可能不完整或無法開機的映像。
 
+`patch_manual_hooks.py` 會在 coccinelle 套用 manual hooks 後補上 Linux 4.14
+缺少的 `fs/namespace.c` forward declarations，避免 `path_umount()` 因呼叫
+後方 static helper 而產生隱式宣告錯誤。
+
 ## SUSFS 狀態
 
 目前流程先不啟用 SUSFS。舊流程只套用了 `susfs4ksu` 的核心檔案系統 patch，
