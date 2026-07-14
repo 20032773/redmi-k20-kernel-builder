@@ -39,6 +39,21 @@ struct pt_regs;
 typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 #endif
 #endif
+
+/* Compatibility for copy_from_user_nofault in Linux < 5.8 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+static inline long copy_from_user_nofault(void *to, const void __user *from, unsigned long size)
+{
+    long ret;
+    mm_segment_t old_fs = get_fs();
+    set_fs(USER_DS);
+    pagefault_disable();
+    ret = __copy_from_user_inatomic(to, from, size);
+    pagefault_enable();
+    set_fs(old_fs);
+    return ret;
+}
+#endif
 """
 
 # Append before #endif at the end if it exists, otherwise append at the end
