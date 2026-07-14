@@ -21,15 +21,26 @@ with open(compat_path, "r", encoding="utf-8") as f:
 # which causes seccomp_cache.h to be skipped when kernel_compat.h is force-included.
 compat_content = compat_content.replace("__KSU_H_KERNEL_COMPAT", "__KSU_H_KERNEL_COMPAT_H_COMPAT")
 
-# Add #include <linux/uaccess.h> and <linux/syscalls.h> at the top to resolve implicit declaration errors
-if "#include <linux/uaccess.h>" not in compat_content:
+# Add standard headers at the top of kernel_compat.h to resolve implicit declaration errors
+required_headers = [
+    "#include <linux/uaccess.h>",
+    "#include <linux/syscalls.h>",
+    "#include <asm/pgtable.h>"
+]
+
+header_injection = ""
+for header in required_headers:
+    if header not in compat_content:
+        header_injection += header + "\n"
+
+if header_injection:
     if "#define __KSU_H_KERNEL_COMPAT_H_COMPAT" in compat_content:
         compat_content = compat_content.replace(
             "#define __KSU_H_KERNEL_COMPAT_H_COMPAT",
-            "#define __KSU_H_KERNEL_COMPAT_H_COMPAT\n#include <linux/uaccess.h>\n#include <linux/syscalls.h>"
+            "#define __KSU_H_KERNEL_COMPAT_H_COMPAT\n" + header_injection.strip()
         )
     else:
-        compat_content = "#include <linux/uaccess.h>\n#include <linux/syscalls.h>\n" + compat_content
+        compat_content = header_injection + compat_content
 
 compat_addition = """
 /* Compatibility layer for Linux < 4.19 (Android 4.14 kernel compatibility) */
