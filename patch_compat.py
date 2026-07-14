@@ -16,15 +16,15 @@ compat_path = os.path.join(ksu_dir, "kernel_compat.h")
 with open(compat_path, "r", encoding="utf-8") as f:
     compat_content = f.read()
 
-# Add #include <linux/uaccess.h> at the top to resolve implicit declaration errors
+# Add #include <linux/uaccess.h> and <linux/syscalls.h> at the top to resolve implicit declaration errors
 if "#include <linux/uaccess.h>" not in compat_content:
     if "#define __KSU_H_KERNEL_COMPAT" in compat_content:
         compat_content = compat_content.replace(
             "#define __KSU_H_KERNEL_COMPAT",
-            "#define __KSU_H_KERNEL_COMPAT\n#include <linux/uaccess.h>"
+            "#define __KSU_H_KERNEL_COMPAT\n#include <linux/uaccess.h>\n#include <linux/syscalls.h>"
         )
     else:
-        compat_content = "#include <linux/uaccess.h>\n" + compat_content
+        compat_content = "#include <linux/uaccess.h>\n#include <linux/syscalls.h>\n" + compat_content
 
 compat_addition = """
 /* Compatibility layer for Linux < 4.19 (Android 4.14 kernel compatibility) */
@@ -37,6 +37,22 @@ compat_addition = """
 #define _KSU_SYSCALL_FN_T
 struct pt_regs;
 typedef long (*syscall_fn_t)(const struct pt_regs *regs);
+#endif
+#endif
+
+/* Compatibility for ksys_* functions introduced in Linux 4.17 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+#ifndef ksys_close
+#define ksys_close sys_close
+#endif
+#ifndef ksys_read
+#define ksys_read sys_read
+#endif
+#ifndef ksys_write
+#define ksys_write sys_write
+#endif
+#ifndef ksys_open
+#define ksys_open sys_open
 #endif
 #endif
 
