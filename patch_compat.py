@@ -16,12 +16,17 @@ compat_path = os.path.join(ksu_dir, "kernel_compat.h")
 with open(compat_path, "r", encoding="utf-8") as f:
     compat_content = f.read()
 
+# Fix SukiSU-Ultra header guard collision:
+# both kernel_compat.h and infra/seccomp_cache.h use __KSU_H_KERNEL_COMPAT,
+# which causes seccomp_cache.h to be skipped when kernel_compat.h is force-included.
+compat_content = compat_content.replace("__KSU_H_KERNEL_COMPAT", "__KSU_H_KERNEL_COMPAT_H_COMPAT")
+
 # Add #include <linux/uaccess.h> and <linux/syscalls.h> at the top to resolve implicit declaration errors
 if "#include <linux/uaccess.h>" not in compat_content:
-    if "#define __KSU_H_KERNEL_COMPAT" in compat_content:
+    if "#define __KSU_H_KERNEL_COMPAT_H_COMPAT" in compat_content:
         compat_content = compat_content.replace(
-            "#define __KSU_H_KERNEL_COMPAT",
-            "#define __KSU_H_KERNEL_COMPAT\n#include <linux/uaccess.h>\n#include <linux/syscalls.h>"
+            "#define __KSU_H_KERNEL_COMPAT_H_COMPAT",
+            "#define __KSU_H_KERNEL_COMPAT_H_COMPAT\n#include <linux/uaccess.h>\n#include <linux/syscalls.h>"
         )
     else:
         compat_content = "#include <linux/uaccess.h>\n#include <linux/syscalls.h>\n" + compat_content
@@ -84,8 +89,8 @@ if "#include <linux/version.h>" in compat_content:
 else:
     # Fallback to inserting after the header definition
     new_compat = compat_content.replace(
-        "#define __KSU_H_KERNEL_COMPAT",
-        "#define __KSU_H_KERNEL_COMPAT\n" + compat_addition
+        "#define __KSU_H_KERNEL_COMPAT_H_COMPAT",
+        "#define __KSU_H_KERNEL_COMPAT_H_COMPAT\n" + compat_addition
     )
 
 with open(compat_path, "w", encoding="utf-8") as f:
