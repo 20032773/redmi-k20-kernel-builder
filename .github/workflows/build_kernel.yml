@@ -157,12 +157,6 @@ jobs:
           # CONFIG_KSU_DEBUG is not set
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           # CONFIG_CC_OPTIMIZE_FOR_SIZE is not set
-          CONFIG_HZ_300=y
-          CONFIG_HZ=300
-          CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
-          # CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE is not set
-          # CONFIG_SCHEDSTATS is not set
-          # CONFIG_WQ_POWER_EFFICIENT_DEFAULT is not set
           # CONFIG_KPROBES is not set
           # CONFIG_KSU_KPROBES_HOOK is not set
           # CONFIG_KSU_HOOK_KPROBES is not set
@@ -185,12 +179,6 @@ jobs:
           grep -qx '# CONFIG_KSU_DEBUG is not set' out/.config
           grep -qx 'CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y' out/.config
           grep -qx '# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set' out/.config
-          grep -qx 'CONFIG_HZ_300=y' out/.config
-          grep -qx 'CONFIG_HZ=300' out/.config
-          grep -qx 'CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y' out/.config
-          grep -qx '# CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE is not set' out/.config
-          grep -qx '# CONFIG_SCHEDSTATS is not set' out/.config
-          grep -qx '# CONFIG_WQ_POWER_EFFICIENT_DEFAULT is not set' out/.config
           grep -qx 'CONFIG_MACH_XIAOMI_DAVINCI=y' out/.config
           if grep -Eq '^CONFIG_(KPROBES|KSU_KPROBES_HOOK|KSU_HOOK_KPROBES|KSU_WITH_KPROBES)=y$' out/.config; then
             echo 'error: a kprobe hook was enabled together with manual hooks' >&2

@@ -64,9 +64,7 @@ fastboot/recovery 並知道如何還原後，才另外測試 `dtbo-davinci.img`�
 ## 安全效能設定
 
 核心會明確使用標準 `CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y` (`-O2`) 並停用
-KernelSU debug。排程維持 Android/Qualcomm EAS 常用的 `HZ=300`，預設 CPU governor
-設為 `schedutil`，關閉 scheduler 統計負擔，並取消省電型 workqueue 的預設合併，
-以較低的背景負擔換取較直接的工作排程反應。
+KernelSU debug。其餘排程、CPU governor、scheduler statistics 與 workqueue 設定
+維持 LineageOS davinci 原始 defconfig，避免實驗性設定造成開機相容性問題。
 
-這些設定不加入超頻、降壓，不修改 CPU/GPU 最高頻率、頻率表或 thermal 控制。
-取消 workqueue 合併可能使待機耗電略增，但不會突破硬體原廠頻率限制。
+此建置不加入超頻、降壓，不修改 CPU/GPU 最高頻率、頻率表或 thermal 控制。
