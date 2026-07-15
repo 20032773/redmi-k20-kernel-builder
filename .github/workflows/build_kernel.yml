@@ -157,6 +157,12 @@ jobs:
           # CONFIG_KSU_DEBUG is not set
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
           # CONFIG_CC_OPTIMIZE_FOR_SIZE is not set
+          CONFIG_HZ_300=y
+          CONFIG_HZ=300
+          CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
+          # CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE is not set
+          # CONFIG_SCHEDSTATS is not set
+          # CONFIG_WQ_POWER_EFFICIENT_DEFAULT is not set
           # CONFIG_KPROBES is not set
           # CONFIG_KSU_KPROBES_HOOK is not set
           # CONFIG_KSU_HOOK_KPROBES is not set
@@ -179,13 +185,19 @@ jobs:
           grep -qx '# CONFIG_KSU_DEBUG is not set' out/.config
           grep -qx 'CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y' out/.config
           grep -qx '# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set' out/.config
+          grep -qx 'CONFIG_HZ_300=y' out/.config
+          grep -qx 'CONFIG_HZ=300' out/.config
+          grep -qx 'CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y' out/.config
+          grep -qx '# CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE is not set' out/.config
+          grep -qx '# CONFIG_SCHEDSTATS is not set' out/.config
+          grep -qx '# CONFIG_WQ_POWER_EFFICIENT_DEFAULT is not set' out/.config
           grep -qx 'CONFIG_MACH_XIAOMI_DAVINCI=y' out/.config
           if grep -Eq '^CONFIG_(KPROBES|KSU_KPROBES_HOOK|KSU_HOOK_KPROBES|KSU_WITH_KPROBES)=y$' out/.config; then
             echo 'error: a kprobe hook was enabled together with manual hooks' >&2
             exit 1
           fi
 
-      - name: Build kernel, modules, and device trees
+      - name: Build kernel and device trees
         env:
           BUILD_DTBO: ${{ inputs.build_dtbo }}
         run: |
@@ -198,7 +210,7 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/clang-toolchain/bin:$PATH"
           # LineageOS davinci uses BOARD_KERNEL_SEPARATED_DTBO := true.
           # Keep the boot kernel and dtbo partition image separate.
-          TARGETS='Image.gz modules'
+          TARGETS='Image.gz'
           if [ "$BUILD_DTBO" = 'true' ]; then
             TARGETS="$TARGETS dtbs"
           fi
@@ -230,7 +242,7 @@ jobs:
           test -s dtbo-davinci.img
           python3 mkdtboimg.py dump dtbo-davinci.img > dtbo-info.txt
 
-      - name: Pack kernel-only and modules AnyKernel3 ZIPs
+      - name: Pack kernel-only AnyKernel3 ZIP
         run: |
           set -euxo pipefail
           git init AnyKernel3-base
@@ -246,38 +258,17 @@ jobs:
           cp anykernel.sh AnyKernel3-kernel-only/anykernel.sh
           grep -qx 'do.modules=0' AnyKernel3-kernel-only/anykernel.sh
 
-          cp -a AnyKernel3-kernel-only AnyKernel3-with-modules
-          sed -i 's/^do\.modules=0$/do.modules=1/' \
-            AnyKernel3-with-modules/anykernel.sh
-          grep -qx 'do.modules=1' AnyKernel3-with-modules/anykernel.sh
-
-          mapfile -t MODULE_FILES < <(find kernel-source/out -type f -name '*.ko' | sort)
-          test "${#MODULE_FILES[@]}" -gt 0
-          MODULE_COUNT="${#MODULE_FILES[@]}"
-          UNIQUE_MODULE_COUNT="$(printf '%s\n' "${MODULE_FILES[@]}" | sed 's#.*/##' | sort -u | wc -l)"
-          if [ "$MODULE_COUNT" -ne "$UNIQUE_MODULE_COUNT" ]; then
-            echo 'error: duplicate module basenames cannot be safely flattened' >&2
-            exit 1
-          fi
-          mkdir -p AnyKernel3-with-modules/modules/vendor/lib/modules
-          cp -t AnyKernel3-with-modules/modules/vendor/lib/modules \
-            "${MODULE_FILES[@]}"
-          echo "packaged_modules=$MODULE_COUNT" >> build-info.txt
+          # Some recoveries remain on the final Done screen when the updater
+          # reaches EOF without an explicit status exit. Flush boot writes and
+          # return success explicitly; never force an automatic reboot.
+          UPDATER=AnyKernel3-kernel-only/META-INF/com/google/android/update-binary
+          printf '\nsync;\nexit 0;\n' >> "$UPDATER"
+          tail -n 2 "$UPDATER" | grep -qx 'exit 0;'
 
           (cd AnyKernel3-kernel-only && \
             zip -r9 ../AnyKernel3-davinci-KernelSU-Next-kernel-only.zip . \
               -x 'README.md')
-          (cd AnyKernel3-with-modules && \
-            zip -r9 ../AnyKernel3-davinci-KernelSU-Next-with-modules.zip . \
-              -x 'README.md')
           test -s AnyKernel3-davinci-KernelSU-Next-kernel-only.zip
-          test -s AnyKernel3-davinci-KernelSU-Next-with-modules.zip
-
-          cp -a game-profile Redmi-K20-Game-Profile
-          chmod 0755 Redmi-K20-Game-Profile/service.sh
-          (cd Redmi-K20-Game-Profile && \
-            zip -r9 ../KernelSU-Next-Redmi-K20-Game-Profile-v1.0.0.zip .)
-          test -s KernelSU-Next-Redmi-K20-Game-Profile-v1.0.0.zip
 
       - name: Collect build outputs
         if: success()
@@ -285,8 +276,6 @@ jobs:
           set -euxo pipefail
           mkdir -p release
           cp AnyKernel3-davinci-KernelSU-Next-kernel-only.zip release/
-          cp AnyKernel3-davinci-KernelSU-Next-with-modules.zip release/
-          cp KernelSU-Next-Redmi-K20-Game-Profile-v1.0.0.zip release/
           cp kernel-source/out/arch/arm64/boot/Image.gz release/
           cp kernel-source/out/.config release/kernel.config
           cp build-info.txt release/
