@@ -18,6 +18,11 @@ on:
         required: true
         default: true
         type: boolean
+      thinlto:
+        description: Enable experimental Clang ThinLTO optimization
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -144,6 +149,8 @@ jobs:
           grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
 
       - name: Configure davinci kernel
+        env:
+          ENABLE_THINLTO: ${{ inputs.thinlto }}
         run: |
           set -euxo pipefail
           cd kernel-source
@@ -165,6 +172,20 @@ jobs:
           CONFIG_KALLSYMS_ALL=y
           EOF
 
+          if [ "$ENABLE_THINLTO" = 'true' ]; then
+            cat >> /tmp/kernelsu-next.config <<'EOF'
+          # CONFIG_LTO_NONE is not set
+          CONFIG_LTO_CLANG=y
+          CONFIG_THINLTO=y
+          EOF
+          else
+            cat >> /tmp/kernelsu-next.config <<'EOF'
+          CONFIG_LTO_NONE=y
+          # CONFIG_LTO_CLANG is not set
+          # CONFIG_THINLTO is not set
+          EOF
+          fi
+
           mkdir -p out
           scripts/kconfig/merge_config.sh -m -O out \
             "arch/arm64/configs/$DEFCONFIG" \
@@ -180,6 +201,17 @@ jobs:
           grep -qx 'CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y' out/.config
           grep -qx '# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set' out/.config
           grep -qx 'CONFIG_MACH_XIAOMI_DAVINCI=y' out/.config
+          if [ "$ENABLE_THINLTO" = 'true' ]; then
+            grep -qx 'CONFIG_LTO=y' out/.config
+            grep -qx 'CONFIG_LTO_CLANG=y' out/.config
+            grep -qx 'CONFIG_THINLTO=y' out/.config
+            grep -qx '# CONFIG_LTO_NONE is not set' out/.config
+          else
+            grep -qx 'CONFIG_LTO_NONE=y' out/.config
+            grep -qx '# CONFIG_LTO_CLANG is not set' out/.config
+            grep -qx '# CONFIG_THINLTO is not set' out/.config
+          fi
+          echo "thinlto=$ENABLE_THINLTO" >> ../build-info.txt
           if grep -Eq '^CONFIG_(KPROBES|KSU_KPROBES_HOOK|KSU_HOOK_KPROBES|KSU_WITH_KPROBES)=y$' out/.config; then
             echo 'error: a kprobe hook was enabled together with manual hooks' >&2
             exit 1
