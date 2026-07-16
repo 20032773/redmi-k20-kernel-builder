@@ -242,6 +242,8 @@ jobs:
             # the Proton GNU gold binary rejects --thinlto-cache-dir.
             command -v ld.lld
             ld.lld --version | head -n 1
+            python3 ../patch_thinlto_kbuild.py
+            grep -qF '$@.lto-prereqs' scripts/Makefile.build
             LTO_MAKE_ARGS+=(LD=ld.lld)
           fi
 
