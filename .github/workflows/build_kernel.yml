@@ -220,6 +220,7 @@ jobs:
       - name: Build kernel and device trees
         env:
           BUILD_DTBO: ${{ inputs.build_dtbo }}
+          ENABLE_THINLTO: ${{ inputs.thinlto }}
         run: |
           set -euxo pipefail
           cd kernel-source
@@ -235,10 +236,20 @@ jobs:
             TARGETS="$TARGETS dtbs"
           fi
 
+          LTO_MAKE_ARGS=()
+          if [ "$ENABLE_THINLTO" = 'true' ]; then
+            # This tree's ThinLTO cache flag is understood by ld.lld, while
+            # the Proton GNU gold binary rejects --thinlto-cache-dir.
+            command -v ld.lld
+            ld.lld --version | head -n 1
+            LTO_MAKE_ARGS+=(LD=ld.lld)
+          fi
+
           make -j"$(nproc)" O=out ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            "${LTO_MAKE_ARGS[@]}" \
             $TARGETS 2>&1 | tee ../build.log
 
           test -s out/arch/arm64/boot/Image.gz
