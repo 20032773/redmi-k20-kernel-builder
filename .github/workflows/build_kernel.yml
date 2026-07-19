@@ -328,22 +328,37 @@ jobs:
           printf '\nsync;\nexit 0;\n' >> "$UPDATER"
           tail -n 2 "$UPDATER" | grep -qx 'exit 0;'
 
+          # Generate custom build names based on device model, LineageOS version, and build date
+          BUILD_DATE="$(date +'%Y%m%d')"
+          LOS_VER="$(echo "${{ inputs.kernel_ref }}" | sed 's/lineage-/lineageos/')"
+          ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next-AnyKernel3.zip"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
           (cd AnyKernel3-kernel-only && \
-            zip -r9 ../AnyKernel3-davinci-KernelSU-Next-kernel-only.zip . \
+            zip -r9 "../$ZIP_NAME" . \
               -x 'README.md')
-          test -s AnyKernel3-davinci-KernelSU-Next-kernel-only.zip
+          test -s "$ZIP_NAME"
 
       - name: Collect build outputs
         if: success()
         run: |
           set -euxo pipefail
           mkdir -p release
-          cp AnyKernel3-davinci-KernelSU-Next-kernel-only.zip release/
-          cp kernel-source/out/arch/arm64/boot/Image.gz release/
+          
+          # Generate custom build names
+          BUILD_DATE="$(date +'%Y%m%d')"
+          LOS_VER="$(echo "${{ inputs.kernel_ref }}" | sed 's/lineage-/lineageos/')"
+          KERNEL_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next"
+          ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next-AnyKernel3.zip"
+          DTBO_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next-dtbo.img"
+          
+          cp "$ZIP_NAME" release/
+          cp kernel-source/out/arch/arm64/boot/Image.gz "release/${KERNEL_NAME}"
           cp kernel-source/out/.config release/kernel.config
           cp build-info.txt release/
           if [ -f dtbo-davinci.img ]; then
-            cp dtbo-davinci.img dtbo-info.txt release/
+            cp dtbo-davinci.img "release/${DTBO_NAME}"
+            cp dtbo-info.txt release/
           fi
           sha256sum release/* > release/SHA256SUMS
 
@@ -351,7 +366,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: davinci-LineageOS-${{ inputs.kernel_ref }}-KernelSU-Next
+          name: RedmiK20-davinci-${{ inputs.kernel_ref }}-KernelSU-Next
           path: release/
           if-no-files-found: error
           retention-days: 30
@@ -360,14 +375,7 @@ jobs:
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release/AnyKernel3-davinci-KernelSU-Next-kernel-only.zip
-            release/Image.gz
-            release/kernel.config
-            release/build-info.txt
-            release/dtbo-davinci.img
-            release/dtbo-info.txt
-            release/SHA256SUMS
+          files: release/*
           tag_name: ksu-next-build-${{ github.run_number }}
           name: KernelSU Next Build #${{ github.run_number }}
           body_path: release/build-info.txt
