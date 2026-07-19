@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>杏仁k20優化 控制面板</title>
+  <style>
+    :root {
+      --md-sys-color-primary: #d0bcff;
+      --md-sys-color-on-primary: #381e72;
+      --md-sys-color-primary-container: #4f378b;
+      --md-sys-color-on-primary-container: #eaddff;
+      --md-sys-color-background: #141218;
+      --md-sys-color-on-background: #e6e1e5;
+      --md-sys-color-surface: #1d1b20;
+      --md-sys-color-on-surface: #e6e1e5;
+      --md-sys-color-surface-container-high: #2b2930;
+      --md-sys-color-on-surface-variant: #cac4d0;
+      --md-sys-color-outline: #938f99;
+      --md-sys-color-error: #f2b8b5;
+      --md-sys-color-success: #b5f2b8;
+      --md-sys-color-success-container: #1b5e20;
+      --md-sys-color-on-success-container: #c8e6c9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--md-sys-color-background);
+      color: var(--md-sys-color-on-background);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 16px;
+      padding-bottom: 32px;
+      line-height: 1.5;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding: 8px 4px;
+    }
+
+    .header svg {
+      width: 32px;
+      height: 32px;
+      fill: var(--md-sys-color-primary);
+    }
+
+    .header-title {
+      font-size: 24px;
+      font-weight: 500;
+      letter-spacing: -0.5px;
+    }
+
+    /* Cards Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    @media (min-width: 600px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .card {
+      background-color: var(--md-sys-color-surface);
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .card:last-child {
+      margin-bottom: 0;
+    }
+
+    .card-title {
+      font-size: 14px;
+      color: var(--md-sys-color-on-surface-variant);
+      font-weight: 500;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title svg {
+      width: 18px;
+      height: 18px;
+      fill: var(--md-sys-color-on-surface-variant);
+    }
+
+    /* Diagnostics Styles */
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .stat-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .stat-label {
+      font-size: 15px;
+      color: var(--md-sys-color-on-surface-variant);
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .highlight-text {
+      color: var(--md-sys-color-primary);
+    }
+
+    /* GPU Progress Bar */
+    .progress-container {
+      width: 100%;
+      background-color: var(--md-sys-color-surface-container-high);
+      height: 8px;
+      border-radius: 100px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background-color: var(--md-sys-color-primary);
+      width: 0%;
+      transition: width 0.5s ease;
+      border-radius: 100px;
+    }
+
+    /* M3 Choice Chips */
+    .chip-container {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .chip {
+      background-color: var(--md-sys-color-surface-container-high);
+      color: var(--md-sys-color-on-surface);
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .chip:active {
+      transform: scale(0.95);
+    }
+
+    .chip.active {
+      background-color: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+      border: 1px solid var(--md-sys-color-primary);
+    }
+
+    /* Special Green Styling for Power Saving Chip */
+    .chip.active.green-chip {
+      background-color: var(--md-sys-color-success-container);
+      color: var(--md-sys-color-on-success-container);
+      border: 1px solid var(--md-sys-color-success);
+    }
+
+    .chip svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    /* Sliders */
+    .slider-group {
+      margin-bottom: 20px;
+    }
+
+    .slider-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .slider-name {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .slider-val {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--md-sys-color-primary);
+    }
+
+    .m3-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--md-sys-color-surface-container-high);
+      outline: none;
+      margin: 12px 0;
+    }
+
+    .m3-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--md-sys-color-primary);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    .m3-slider::-webkit-slider-thumb:active {
+      transform: scale(1.3);
+    }
+
+    /* Switches */
+    .switch-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+
+    .switch-label-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .switch-title {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .switch-desc {
+      font-size: 12px;
+      color: var(--md-sys-color-on-surface-variant);
+    }
+
+    .m3-switch {
+      position: relative;
+      display: inline-block;
+      width: 52px;
+      height: 32px;
+    }
+
+    .m3-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--md-sys-color-surface-container-high);
+      transition: .3s;
+      border-radius: 100px;
+      border: 2px solid var(--md-sys-color-outline);
+    }
+
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 6px;
+      bottom: 6px;
+      background-color: var(--md-sys-color-outline);
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .switch-slider {
+      background-color: var(--md-sys-color-primary-container);
+      border-color: var(--md-sys-color-primary);
+    }
+
+    input:checked + .switch-slider:before {
+      transform: translateX(20px);
+      background-color: var(--md-sys-color-primary);
+      width: 24px;
+      height: 24px;
+      left: 0px;
+      bottom: 2px;
+    }
+
+    /* Snackbar (Toast) */
+    .snackbar {
+      visibility: hidden;
+      min-width: 280px;
+      background-color: var(--md-sys-color-surface-container-high);
+      color: var(--md-sys-color-on-surface);
+      text-align: center;
+      border-radius: 8px;
+      padding: 12px 16px;
+      position: fixed;
+      z-index: 1000;
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%);
+      font-size: 14px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.05);
+      transition: visibility 0s, opacity 0.3s ease-in-out;
+      opacity: 0;
+    }
+
+    .snackbar.show {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    /* M3 Button */
+    .m3-button {
+      width: 100%;
+      background-color: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 100px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .m3-button:active {
+      transform: scale(0.98);
+    }
+
+    .m3-button svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <!-- Inline SVG CPU Icon -->
+    <svg viewBox="0 0 24 24">
+      <path d="M19 9h2v2h-2V9m0 4h2v2h-2v-2M5 11H3V9h2v2m0 4H3v-2h2v2m8-12h-2v2h2V3m-4 0H7v2h2V3m8 0h-2v2h2V3M9 19H7v2h2v-2m4 0h-2v2h2v-2m4 0h-2v2h2v-2M17 7v10H7V7h10m2-2H5c-1.11 0-2 .89-2 2v10c0 1.11.89 2 2 2h14c1.1 0 2-.9 2-2V7c0-1.11-.9-2-2-2m-4 4H9v6h6V9Z"/>
+    </svg>
+    <div class="header-title">杏仁k20優化</div>
+  </div>
+
+  <div class="grid">
+    <!-- Diagnostics Card -->
+    <div class="card">
+      <div class="card-title">
+        <!-- Dashboard Icon -->
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm1-13h-2v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
+        </svg>
+        即時診斷
+      </div>
+      <div class="stat-row">
+        <div class="stat-label">當前運作檔位</div>
+        <div class="stat-value highlight-text" id="val-cur-profile" style="font-weight: bold;">---</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-label">小核心頻率 (cpu0)</div>
+        <div class="stat-value" id="val-cpu0-cur">---</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-label">大核心頻率 (cpu6)</div>
+        <div class="stat-value" id="val-cpu6-cur">---</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-label">GPU 當前頻率</div>
+        <div class="stat-value" id="val-gpu-cur">---</div>
+      </div>
+      <div class="stat-row" style="flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px;">
+        <div style="display: flex; width: 100%; justify-content: space-between;">
+          <div class="stat-label">GPU 負載率</div>
+          <div class="stat-value highlight-text" id="val-gpu-load">0%</div>
+        </div>
+        <div class="progress-container">
+          <div class="progress-bar" id="pb-gpu-load"></div>
+        </div>
+      </div>
+      <div class="stat-row" style="margin-top: 12px;">
+        <div class="stat-label">電池溫度</div>
+        <div class="stat-value highlight-text" id="val-temp">---</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-label">目前電量</div>
+        <div class="stat-value" id="val-battery">---</div>
+      </div>
+    </div>
+
+    <!-- Presets Card -->
+    <div class="card">
+      <div class="card-title">
+        <!-- Bolt Icon -->
+        <svg viewBox="0 0 24 24">
+          <path d="M11 15H6l7-14v8h5l-7 14v-8Z"/>
+        </svg>
+        快速效能檔
+      </div>
+      <div class="chip-container">
+        <button class="chip" id="chip-saving" onclick="applyPreset('saving')">
+          省電
+        </button>
+        <button class="chip" id="chip-stock" onclick="applyPreset('stock')">
+          原廠
+        </button>
+        <button class="chip" id="chip-balanced" onclick="applyPreset('balanced')">
+          平衡
+        </button>
+        <button class="chip" id="chip-performance" onclick="applyPreset('performance')">
+          積極
+        </button>
+      </div>
+      <div style="font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 8px;" id="profile-desc">
+        點擊上方設定檔快速切換頻率與溫控。
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual Adjustments Card -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="card-title">
+      <!-- Tune Icon -->
+      <svg viewBox="0 0 24 24">
+        <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-8v2H21V5H15v-2h-2v6h2V5z"/>
+      </svg>
+      自訂處理器上限
+    </div>
+
+    <!-- Little Cluster Slider -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <div class="slider-name">小核心上限 (cpu0-cpu5)</div>
+        <div class="slider-val" id="lbl-little-max">---</div>
+      </div>
+      <input type="range" min="0" max="8" value="3" class="m3-slider" id="slider-little" oninput="updateSliderLabel('little', this.value)" onchange="applyCustomSettings()">
+    </div>
+
+    <!-- Big Cluster Slider -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <div class="slider-name">大核心上限 (cpu6-cpu7)</div>
+        <div class="slider-val" id="lbl-big-max">---</div>
+      </div>
+      <input type="range" min="0" max="9" value="6" class="m3-slider" id="slider-big" oninput="updateSliderLabel('big', this.value)" onchange="applyCustomSettings()">
+    </div>
+
+    <!-- GPU Slider -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <div class="slider-name">GPU 頻率上限</div>
+        <div class="slider-val" id="lbl-gpu-max">---</div>
+      </div>
+      <input type="range" min="1" max="5" value="3" class="m3-slider" id="slider-gpu" oninput="updateSliderLabel('gpu', this.value)" onchange="applyCustomSettings()">
+    </div>
+
+    <!-- GPU Governor Choice -->
+    <div class="slider-group" style="margin-top: 12px;">
+      <div class="slider-name" style="margin-bottom: 8px;">GPU 調度器模式 (Governor)</div>
+      <div class="chip-container">
+        <button class="chip" id="chip-gov-tz" onclick="setCustomGovernor('msm-adreno-tz')">
+          動態調度
+        </button>
+        <button class="chip" id="chip-gov-perf" onclick="setCustomGovernor('performance')">
+          鎖定最高頻
+        </button>
+      </div>
+    </div>
+
+    <button class="m3-button" onclick="applyCustomSettings()">
+      <!-- Save Icon -->
+      <svg viewBox="0 0 24 24">
+        <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+      </svg>
+      手動套用並保存設定
+    </button>
+  </div>
+
+
+
+  <!-- Thermal Daemons Card -->
+  <div class="card">
+    <div class="card-title">
+      <!-- Thermostat Icon -->
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zm2 14h-4v-1h4v1zm0-2h-4v-1h4v1zm1.25-2.73l-.75.53V11h-5v-.79l-.75-.53A4.996 4.996 0 0 1 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.94-.8 3.52-2.25 4.27z"/>
+      </svg>
+      系統溫控服務開關
+    </div>
+
+    <!-- Thermal Engine Switch -->
+    <div class="switch-row">
+      <div class="switch-label-group">
+        <div class="switch-title">高通溫控 (thermal-engine)</div>
+        <div class="switch-desc">高通核心硬體溫控服務</div>
+      </div>
+      <label class="m3-switch">
+        <input type="checkbox" id="sw-thermal-engine" onchange="toggleThermalService('thermal-engine', this.checked)">
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+
+    <!-- mi_thermald Switch -->
+    <div class="switch-row">
+      <div class="switch-label-group">
+        <div class="switch-title">小米溫控 (mi_thermald)</div>
+        <div class="switch-desc">小米軟體溫度控制守護進程</div>
+      </div>
+      <label class="m3-switch">
+        <input type="checkbox" id="sw-mi-thermald" onchange="toggleThermalService('mi-thermald', this.checked)">
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Toast Message -->
+  <div id="toast" class="snackbar">已套用設定</div>
+
+  <script>
+    // Arrays for CPU & GPU
+    const littleFreqs = [576000, 768000, 1017600, 1248000, 1324800, 1497600, 1612800, 1708800, 1804800];
+    const littleLabels = ["576 MHz", "768 MHz", "1.01 GHz", "1.24 GHz", "1.32 GHz", "1.50 GHz", "1.61 GHz", "1.70 GHz", "1.80 GHz"];
+
+    const bigFreqs = [979200, 1094400, 1209600, 1324800, 1555200, 1708800, 1843200, 1939200, 2169600, 2208000];
+    const bigLabels = ["979 MHz", "1.09 GHz", "1.20 GHz", "1.32 GHz", "1.55 GHz", "1.70 GHz", "1.84 GHz", "1.93 GHz", "2.16 GHz", "2.20 GHz"];
+
+    const gpuFreqs = [180000000, 267000000, 355000000, 430000000, 565000000, 610000000];
+    const gpuLabels = ["180 MHz", "267 MHz", "355 MHz", "430 MHz", "565 MHz", "610 MHz"];
+
+    let isKSUReady = false;
+    let currentProfile = "balanced";
+    let customGovernor = "msm-adreno-tz";
+
+    // Promise wrapper for KernelSU exec
+    function exec(cmd) {
+      return new Promise((resolve, reject) => {
+        if (!window.ksu || !window.ksu.exec) {
+          console.log("Mock Exec:", cmd);
+          setTimeout(() => resolve(""), 50);
+          return;
+        }
+        const callbackName = 'ksu_cb_' + Math.random().toString(36).substring(2, 9);
+        window[callbackName] = (errno, stdout, stderr) => {
+          delete window[callbackName];
+          if (errno === 0) {
+            resolve(stdout.trim());
+          } else {
+            reject(new Error(stderr || `Command failed with code ${errno}`));
+          }
+        };
+        window.ksu.exec(cmd, '{}', callbackName);
+      });
+    }
+
+    // Toast UI Helper
+    function showToast(text) {
+      const toast = document.getElementById("toast");
+      toast.innerText = text;
+      toast.className = "snackbar show";
+      setTimeout(() => {
+        toast.className = toast.className.replace("show", "");
+      }, 2500);
+    }
+
+    // Update Slider UI Label locally on drag
+    function updateSliderLabel(cluster, value) {
+      if (cluster === 'little') {
+        document.getElementById("lbl-little-max").innerText = littleLabels[value];
+      } else if (cluster === 'big') {
+        document.getElementById("lbl-big-max").innerText = bigLabels[value];
+      } else if (cluster === 'gpu') {
+        document.getElementById("lbl-gpu-max").innerText = gpuLabels[value];
+      }
+    }
+
+    // Init diagnostics and settings
+    async function init() {
+      if (window.ksu && window.ksu.exec) {
+        isKSUReady = true;
+      }
+      
+      await loadPersistentConfig();
+      await updateDiagnostics();
+      
+      // Periodic stats updates
+      setInterval(updateDiagnostics, 2000);
+    }
+
+    // Load saved config or default
+    async function loadPersistentConfig() {
+      try {
+        const confStr = await exec("cat /data/adb/modules/almond_k20_optimizer/config.prop");
+        if (confStr) {
+          const lines = confStr.split('\n');
+          let littleMax = null, bigMax = null, gpuMax = null, gpuGov = null, thermalEng = null, miTherm = null, profile = null;
+          lines.forEach(line => {
+            const parts = line.split('=');
+            if (parts.length === 2) {
+              const k = parts[0].trim();
+              const v = parts[1].trim();
+              if (k === 'LITTLE_MAX') littleMax = parseInt(v);
+              if (k === 'BIG_MAX') bigMax = parseInt(v);
+              if (k === 'GPU_MAX') gpuMax = parseInt(v);
+              if (k === 'GPU_GOVERNOR') gpuGov = v;
+              if (k === 'THERMAL_ENGINE') thermalEng = v;
+              if (k === 'MI_THERMALD') miTherm = v;
+              if (k === 'PROFILE') profile = v;
+            }
+          });
+
+          // Sync sliders UI
+          if (littleMax) {
+            const idx = littleFreqs.indexOf(littleMax);
+            if (idx !== -1) {
+              document.getElementById("slider-little").value = idx;
+              updateSliderLabel('little', idx);
+            }
+          }
+          if (bigMax) {
+            const idx = bigFreqs.indexOf(bigMax);
+            if (idx !== -1) {
+              document.getElementById("slider-big").value = idx;
+              updateSliderLabel('big', idx);
+            }
+          }
+          if (gpuMax) {
+            const idx = gpuFreqs.indexOf(gpuMax);
+            if (idx !== -1) {
+              document.getElementById("slider-gpu").value = idx;
+              updateSliderLabel('gpu', idx);
+            }
+          }
+
+          // Sync Governor UI
+          if (gpuGov) {
+            customGovernor = gpuGov;
+            updateGovernorChipsUI(gpuGov);
+          }
+
+          // Sync Switches UI
+          if (thermalEng) {
+            document.getElementById("sw-thermal-engine").checked = (thermalEng === 'running');
+          }
+          if (miTherm) {
+            document.getElementById("sw-mi-thermald").checked = (miTherm === 'running');
+          }
+
+          // Sync Profile UI
+          if (profile) {
+            currentProfile = profile;
+            updateProfileChipsUI(profile);
+          }
+        } else {
+          // Defaults to balanced
+          applyPreset('balanced', false);
+        }
+      } catch (err) {
+        // Fallback defaults
+        updateSliderLabel('little', document.getElementById("slider-little").value);
+        updateSliderLabel('big', document.getElementById("slider-big").value);
+        updateSliderLabel('gpu', document.getElementById("slider-gpu").value);
+      }
+    }
+
+    // Refresh UI parameters
+    async function updateDiagnostics() {
+      try {
+        const cpu0Cur = await exec("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
+        const cpu6Cur = await exec("cat /sys/devices/system/cpu/cpu6/cpufreq/scaling_cur_freq");
+        const gpuCur = await exec("cat /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq");
+        const gpuBusy = await exec("cat /sys/class/kgsl/kgsl-3d0/gpubusy");
+        const batTempRaw = await exec("cat /sys/class/power_supply/battery/temp");
+        const batCap = await exec("cat /sys/class/power_supply/battery/capacity");
+
+        if (cpu0Cur) {
+          const mhz = Math.round(parseInt(cpu0Cur) / 1000);
+          document.getElementById("val-cpu0-cur").innerText = mhz >= 1000 ? `${(mhz/1000).toFixed(2)} GHz` : `${mhz} MHz`;
+        }
+        if (cpu6Cur) {
+          const mhz = Math.round(parseInt(cpu6Cur) / 1000);
+          document.getElementById("val-cpu6-cur").innerText = mhz >= 1000 ? `${(mhz/1000).toFixed(2)} GHz` : `${mhz} MHz`;
+        }
+        if (gpuCur) {
+          const mhz = Math.round(parseInt(gpuCur) / 1000000);
+          document.getElementById("val-gpu-cur").innerText = `${mhz} MHz`;
+        }
+        if (gpuBusy) {
+          const parts = gpuBusy.split(/\s+/);
+          if (parts.length >= 2) {
+            const busy = parseInt(parts[0]);
+            const total = parseInt(parts[1]);
+            const pct = total > 0 ? Math.round((busy / total) * 100) : 0;
+            document.getElementById("val-gpu-load").innerText = `${pct}%`;
+            document.getElementById("pb-gpu-load").style.width = `${pct}%`;
+          }
+        }
+        if (batTempRaw) {
+          const temp = (parseInt(batTempRaw) / 10).toFixed(1);
+          document.getElementById("val-temp").innerText = `${temp} °C`;
+        }
+        if (batCap) {
+          document.getElementById("val-battery").innerText = `${batCap}%`;
+        }
+
+        // Live daemon status refresh
+        const thermalSvc = await exec("getprop init.svc.vendor.thermal-engine");
+        const miSvc = await exec("getprop init.svc.mi_thermald");
+        if (thermalSvc) document.getElementById("sw-thermal-engine").checked = (thermalSvc === 'running');
+        if (miSvc) document.getElementById("sw-mi-thermald").checked = (miSvc === 'running');
+
+        // Update profile text display
+        const profileNames = {
+          'saving': '省電模式 🍃',
+          'stock': '原廠模式 📱',
+          'balanced': '平衡模式 ⚖️',
+          'performance': '積極模式 ⚡',
+          'custom': '自訂參數 ⚙️'
+        };
+        document.getElementById("val-cur-profile").innerText = profileNames[currentProfile] || '平衡模式 ⚖️';
+
+      } catch (err) {
+        const profileNames = {
+          'saving': '省電模式 🍃',
+          'stock': '原廠模式 📱',
+          'balanced': '平衡模式 ⚖️',
+          'performance': '積極模式 ⚡',
+          'custom': '自訂參數 ⚙️'
+        };
+        document.getElementById("val-cur-profile").innerText = profileNames[currentProfile] || '平衡模式 ⚖️';
+
+        if (!isKSUReady) {
+          document.getElementById("val-cpu0-cur").innerText = "1.01 GHz";
+          document.getElementById("val-cpu6-cur").innerText = "1.84 GHz";
+          document.getElementById("val-gpu-cur").innerText = "267 MHz";
+          document.getElementById("val-gpu-load").innerText = "15%";
+          document.getElementById("pb-gpu-load").style.width = "15%";
+          document.getElementById("val-temp").innerText = "35.2 °C";
+          document.getElementById("val-battery").innerText = "75%";
+        }
+      }
+    }
+
+    // Save configurations back to phone storage
+    async function saveConfig(little, big, gpu, gov, thermal, mi, profile, vmOptimized) {
+      const configText = `LITTLE_MAX=${little}\nBIG_MAX=${big}\nGPU_MAX=${gpu}\nGPU_GOVERNOR=${gov}\nTHERMAL_ENGINE=${thermal}\nMI_THERMALD=${mi}\nVM_OPTIMIZED=${vmOptimized}\nPROFILE=${profile}`;
+      await exec(`echo "${configText}" > /data/adb/modules/almond_k20_optimizer/config.prop`);
+    }
+
+    // Apply specific preset
+    async function applyPreset(preset, triggerToast = true) {
+      currentProfile = preset;
+      updateProfileChipsUI(preset);
+
+      let littleMax, bigMax, gpuMax, gpuGov, thermalEng, miTherm, vmOptimized;
+
+      if (preset === 'saving') {
+        littleMax = 768000;    // 768 MHz
+        bigMax = 1209600;     // 1.20 GHz
+        gpuMax = 267000000;   // 267 MHz
+        gpuGov = 'powersave'; // Minimum lock
+        thermalEng = 'running';
+        miTherm = 'running';
+        vmOptimized = 'true';
+        document.getElementById("profile-desc").innerText = "省電模式：限制小核 768M/大核 1.2G，GPU 鎖死 180M 最省電，開啟溫控。";
+      } else if (preset === 'stock') {
+        littleMax = 1804800;  // 1.80 GHz
+        bigMax = 2208000;     // 2.20 GHz
+        gpuMax = 610000000;   // 610 MHz
+        gpuGov = 'msm-adreno-tz'; // Dynamic default
+        thermalEng = 'running';
+        miTherm = 'running';
+        vmOptimized = 'false'; // Revert Swappiness memory settings to Android default
+        document.getElementById("profile-desc").innerText = "原廠模式：回復官方所有參數、還原溫控與記憶體配置。";
+      } else if (preset === 'balanced') {
+        littleMax = 1017600;  // 1.01 GHz
+        bigMax = 1843200;     // 1.84 GHz
+        gpuMax = 430000000;   // 430 MHz
+        gpuGov = 'msm-adreno-tz'; // Dynamic limited
+        thermalEng = 'stopped';
+        miTherm = 'stopped';
+        vmOptimized = 'true';
+        document.getElementById("profile-desc").innerText = "平衡模式：關閉溫控。限制小核，大核 1.84G，GPU 限制 430M，兼顧流暢與溫控。";
+      } else if (preset === 'performance') {
+        littleMax = 1497600;  // 1.50 GHz
+        bigMax = 2208000;     // 2.20 GHz
+        gpuMax = 610000000;   // 610 MHz
+        gpuGov = 'performance'; // Max lock
+        thermalEng = 'stopped';
+        miTherm = 'stopped';
+        vmOptimized = 'true';
+        document.getElementById("profile-desc").innerText = "積極模式：關閉溫控。大核全開 2.2G，GPU 鎖死最高頻 610M，極限輸出。";
+      }
+
+      // Sync sliders UI
+      const lIdx = littleFreqs.indexOf(littleMax);
+      document.getElementById("slider-little").value = lIdx;
+      updateSliderLabel('little', lIdx);
+
+      const bIdx = bigFreqs.indexOf(bigMax);
+      document.getElementById("slider-big").value = bIdx;
+      updateSliderLabel('big', bIdx);
+
+      const gIdx = gpuFreqs.indexOf(gpuMax);
+      document.getElementById("slider-gpu").value = gIdx;
+      updateSliderLabel('gpu', gIdx);
+
+      // Sync Governor UI
+      customGovernor = gpuGov;
+      updateGovernorChipsUI(gpuGov);
+
+      // Sync switches UI
+      document.getElementById("sw-thermal-engine").checked = (thermalEng === 'running');
+      document.getElementById("sw-mi-thermald").checked = (miTherm === 'running');
+
+      // Write settings to system
+      await applySystemSettings(littleMax, bigMax, gpuMax, gpuGov, thermalEng, miTherm, vmOptimized, preset, triggerToast);
+    }
+
+    // Handle Custom adjustment sliders/toggles
+    async function applyCustomSettings() {
+      currentProfile = 'custom';
+      updateProfileChipsUI('custom');
+      document.getElementById("profile-desc").innerText = "自訂模式：使用手動拉選的頻率上限與溫控開關。";
+
+      const lIdx = parseInt(document.getElementById("slider-little").value);
+      const bIdx = parseInt(document.getElementById("slider-big").value);
+      const gIdx = parseInt(document.getElementById("slider-gpu").value);
+      const littleMax = littleFreqs[lIdx];
+      const bigMax = bigFreqs[bIdx];
+      const gpuMax = gpuFreqs[gIdx];
+
+      const thermalEng = document.getElementById("sw-thermal-engine").checked ? 'running' : 'stopped';
+      const miTherm = document.getElementById("sw-mi-thermald").checked ? 'running' : 'stopped';
+
+      await applySystemSettings(littleMax, bigMax, gpuMax, customGovernor, thermalEng, miTherm, 'true', 'custom', true);
+    }
+
+    // Custom Governor chip toggle
+    function setCustomGovernor(gov) {
+      customGovernor = gov;
+      updateGovernorChipsUI(gov);
+      applyCustomSettings();
+    }
+
+    // Toggle Thermal switches
+    async function toggleThermalService(service, isChecked) {
+      const state = isChecked ? 'running' : 'stopped';
+      if (isChecked) {
+        await exec(`start ${service === 'thermal-engine' ? 'vendor.thermal-engine' : 'mi_thermald'}`);
+      } else {
+        await exec(`stop ${service === 'thermal-engine' ? 'vendor.thermal-engine' : 'mi_thermald'}`);
+      }
+
+      currentProfile = 'custom';
+      updateProfileChipsUI('custom');
+      document.getElementById("profile-desc").innerText = "自訂模式：已手動調整溫控開關。";
+
+      const lIdx = parseInt(document.getElementById("slider-little").value);
+      const bIdx = parseInt(document.getElementById("slider-big").value);
+      const gIdx = parseInt(document.getElementById("slider-gpu").value);
+      await saveConfig(littleFreqs[lIdx], bigFreqs[bIdx], gpuFreqs[gIdx], customGovernor,
+                       document.getElementById("sw-thermal-engine").checked ? 'running' : 'stopped',
+                       document.getElementById("sw-mi-thermald").checked ? 'running' : 'stopped',
+                       'true', 'custom');
+      showToast(`已${isChecked ? '開啟' : '關閉'}${service === 'thermal-engine' ? '高通溫控' : '小米溫控'}`);
+    }
+
+    // Bottom level execution logic
+    async function applySystemSettings(little, big, gpu, gov, thermal, mi, vmOptimized, profile, triggerToast) {
+      try {
+        // 1. Virtual memory optimization toggling
+        if (vmOptimized === 'true') {
+          await exec("sysctl -w vm.swappiness=100");
+          await exec("sysctl -w vm.extra_free_kbytes=8192");
+          await exec("sysctl -w vm.watermark_scale_factor=50");
+        } else {
+          await exec("sysctl -w vm.swappiness=60");
+          await exec("sysctl -w vm.extra_free_kbytes=29615");
+          await exec("sysctl -w vm.watermark_scale_factor=10");
+        }
+
+        // 2. Thermal services state
+        if (thermal === 'running') {
+          await exec("start vendor.thermal-engine");
+        } else {
+          await exec("stop vendor.thermal-engine");
+        }
+
+        if (mi === 'running') {
+          await exec("start mi_thermald");
+        } else {
+          await exec("stop mi_thermald");
+        }
+
+        // 3. Clear thermal limits in kernel for Big cores (cpu6-7)
+        await exec("echo 0 > /sys/class/thermal/cooling_device9/cur_state");
+        await exec("echo 0 > /sys/class/thermal/cooling_device10/cur_state");
+
+        // 4. Write Little cores max freq (cpu0-5)
+        for (let i = 0; i <= 5; i++) {
+          await exec(`echo ${little} > /sys/devices/system/cpu/cpu${i}/cpufreq/scaling_max_freq`);
+        }
+
+        // 5. Write Big cores max freq (cpu6-7)
+        await exec(`echo ${big} > /sys/devices/system/cpu/cpu6/cpufreq/scaling_max_freq`);
+        await exec(`echo ${big} > /sys/devices/system/cpu/cpu7/cpufreq/scaling_max_freq`);
+
+        // 6. Write GPU max freq and governor
+        await exec(`echo ${gov} > /sys/class/kgsl/kgsl-3d0/devfreq/governor`);
+        await exec(`echo ${gpu} > /sys/class/kgsl/kgsl-3d0/devfreq/max_freq`);
+
+        // 7. Save configurations file
+        await saveConfig(little, big, gpu, gov, thermal, mi, vmOptimized, profile);
+
+        if (triggerToast) {
+          const profileNames = { 
+            'saving': '省電模式', 
+            'stock': '原廠模式', 
+            'balanced': '平衡優化模式', 
+            'performance': '積極模式', 
+            'custom': '自訂調頻參數' 
+          };
+          showToast(`已成功套用 ${profileNames[profile] || ''}`);
+        }
+      } catch (err) {
+        if (triggerToast) {
+          showToast("套用失敗，請確認是否具備 Root 權限");
+        }
+      }
+    }
+
+    // UI helpers to update chips status
+    function updateProfileChipsUI(profile) {
+      document.getElementById("chip-saving").className = "chip" + (profile === 'saving' ? " active green-chip" : "");
+      document.getElementById("chip-stock").className = "chip" + (profile === 'stock' ? " active" : "");
+      document.getElementById("chip-balanced").className = "chip" + (profile === 'balanced' ? " active" : "");
+      document.getElementById("chip-performance").className = "chip" + (profile === 'performance' ? " active" : "");
+    }
+
+    function updateGovernorChipsUI(gov) {
+      document.getElementById("chip-gov-tz").className = "chip" + (gov === 'msm-adreno-tz' ? " active" : "");
+      document.getElementById("chip-gov-perf").className = "chip" + (gov === 'performance' ? " active" : "");
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
