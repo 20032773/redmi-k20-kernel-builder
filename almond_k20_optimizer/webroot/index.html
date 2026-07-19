@@ -787,7 +787,7 @@
     }
 
     // Save configurations back to phone storage
-    async function saveConfig(little, big, gpu, gov, thermal, mi, profile, vmOptimized) {
+    async function saveConfig(little, big, gpu, gov, thermal, mi, vmOptimized, profile) {
       const configText = `LITTLE_MAX=${little}\nBIG_MAX=${big}\nGPU_MAX=${gpu}\nGPU_GOVERNOR=${gov}\nTHERMAL_ENGINE=${thermal}\nMI_THERMALD=${mi}\nVM_OPTIMIZED=${vmOptimized}\nPROFILE=${profile}`;
       await exec(`echo "${configText}" > /data/adb/modules/almond_k20_optimizer/config.prop`);
     }
