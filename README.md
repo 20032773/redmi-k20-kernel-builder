@@ -1,5 +1,7 @@
 # Redmi K20 (davinci) KernelSU Next
 
+> ⚠️ **此專案是 Vibe Coding** (以 AI 驅動、純憑感覺與默契開發)
+
 本專案專為 Redmi K20 / Mi 9T (`davinci`) 提供 LineageOS Linux 4.14 核心與 KernelSU Next 的編譯與優化支援。
 
 ---
