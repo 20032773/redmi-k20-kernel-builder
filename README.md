@@ -9,7 +9,7 @@
 ## 📱 支援裝置與核心
 *   **裝置**：Redmi K20 / Mi 9T (`davinci`)
 *   **系統核心**：Linux 4.14 核心 (LineageOS)
-*   **Root 方案**：核心級 KernelSU Next (整合 `legacy` 分支與 manual hooks)
+*   **Root 方案**：核心級 KernelSU Next (整合 `legacy` 分支，預設使用 Commit `fd093e8b879063aeb0192a3959b0652101ded623`)
 
 ---
 

@@ -30,7 +30,7 @@ on:
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: redmi-k20-kernel-${{ github.ref }}
@@ -355,6 +355,26 @@ jobs:
           path: release/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/AnyKernel3-davinci-KernelSU-Next-kernel-only.zip
+            release/Image.gz
+            release/kernel.config
+            release/build-info.txt
+            release/dtbo-davinci.img
+            release/dtbo-info.txt
+            release/SHA256SUMS
+          tag_name: ksu-next-build-${{ github.run_number }}
+          name: KernelSU Next Build #${{ github.run_number }}
+          body_path: release/build-info.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload failure diagnostics
         if: failure()
