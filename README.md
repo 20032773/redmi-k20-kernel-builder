@@ -48,3 +48,8 @@
 4.  **Linux 核心開源協議 (GPLv2)**：
     *   Linux 核心採用 **GPLv2**（通用公共授權條款第二版）協議授權。
     *   依協議規定，GPLv2 具有「傳染性」：任何對核心原始碼進行修改、客製的二次開發作品，都必須強制以 GPLv2 協議公開釋出其完整的原始碼。本專案嚴格遵循此開源合規義務。
+
+---
+
+## ⚖️ 開源協議 (License)
+本專案採用 [GNU General Public License v2.0 (GPLv2)](file:///d:/googleAI/redmi-k20-kernel-builder/LICENSE) 授權協議進行開源。
