@@ -337,7 +337,12 @@ jobs:
           if [ "${{ inputs.los_fw_date }}" != "auto" ] && [ -n "${{ inputs.los_fw_date }}" ]; then
             LOS_DATE="${{ inputs.los_fw_date }}"
           else
-            LOS_DATE="$(git -C kernel-source log -1 --format=%cd --date=format:'%Y%m%d')"
+            OFFICIAL_DATE="$(python3 -c "import urllib.request, json; data = json.loads(urllib.request.urlopen('https://download.lineageos.org/api/v2/devices/davinci/builds').read()); print(data[0]['date'].replace('-', ''))" 2>/dev/null || true)"
+            if [ -n "$OFFICIAL_DATE" ]; then
+              LOS_DATE="$OFFICIAL_DATE"
+            else
+              LOS_DATE="$(git -C kernel-source log -1 --format=%cd --date=format:'%Y%m%d')"
+            fi
           fi
           LOS_VER="$(echo "${{ inputs.kernel_ref }}" | sed 's/lineage-/lineageos/')"
           ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${LOS_DATE}-KernelSU-Next-AnyKernel3.zip"
@@ -358,7 +363,12 @@ jobs:
           if [ "${{ inputs.los_fw_date }}" != "auto" ] && [ -n "${{ inputs.los_fw_date }}" ]; then
             LOS_DATE="${{ inputs.los_fw_date }}"
           else
-            LOS_DATE="$(git -C kernel-source log -1 --format=%cd --date=format:'%Y%m%d')"
+            OFFICIAL_DATE="$(python3 -c "import urllib.request, json; data = json.loads(urllib.request.urlopen('https://download.lineageos.org/api/v2/devices/davinci/builds').read()); print(data[0]['date'].replace('-', ''))" 2>/dev/null || true)"
+            if [ -n "$OFFICIAL_DATE" ]; then
+              LOS_DATE="$OFFICIAL_DATE"
+            else
+              LOS_DATE="$(git -C kernel-source log -1 --format=%cd --date=format:'%Y%m%d')"
+            fi
           fi
           LOS_VER="$(echo "${{ inputs.kernel_ref }}" | sed 's/lineage-/lineageos/')"
           KERNEL_NAME="RedmiK20-davinci-${LOS_VER}-${LOS_DATE}-KernelSU-Next"
