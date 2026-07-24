@@ -27,6 +27,7 @@ public class AddonDManager {
                 "    ;;\n" +
                 "esac\n";
         String cmd = "mount -o remount,rw /system && " +
+                "mkdir -p /system/addon.d && " +
                 "echo '" + script + "' > " + ADDOND_PATH + " && " +
                 "chmod 755 " + ADDOND_PATH;
         String res = SuShell.exec(cmd);
