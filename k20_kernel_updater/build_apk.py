@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import shutil
+import zipfile
 
 SDK_DIR = r"C:\Users\k0983\AppData\Local\Android\Sdk"
 BUILD_TOOLS = os.path.join(SDK_DIR, "build-tools", "35.0.0")
@@ -26,10 +27,12 @@ def main():
 
     # 1. Compile Java
     java_files = []
-    for root, _, files in os.walk(os.path.join(PROJECT_DIR, "src")):
-        for f in files:
-            if f.endswith(".java"):
-                java_files.append(os.path.join(root, f))
+    src_dir = os.path.join(PROJECT_DIR, "src")
+    if os.path.exists(src_dir):
+        for root, _, files in os.walk(src_dir):
+            for f in files:
+                if f.endswith(".java"):
+                    java_files.append(os.path.join(root, f))
 
     if java_files:
         run_cmd([
@@ -40,13 +43,16 @@ def main():
 
     # 2. Dex
     class_files = []
-    for root, _, files in os.walk(os.path.join(BIN_DIR, "classes")):
-        for f in files:
-            if f.endswith(".class"):
-                class_files.append(os.path.join(root, f))
+    classes_dir = os.path.join(BIN_DIR, "classes")
+    if os.path.exists(classes_dir):
+        for root, _, files in os.walk(classes_dir):
+            for f in files:
+                if f.endswith(".class"):
+                    class_files.append(os.path.join(root, f))
 
-    d8_bat = os.path.join(BUILD_TOOLS, "d8.bat")
-    run_cmd([d8_bat, "--output", BIN_DIR, "--min-api", "28"] + class_files)
+    if class_files:
+        d8_bat = os.path.join(BUILD_TOOLS, "d8.bat")
+        run_cmd([d8_bat, "--output", BIN_DIR, "--min-api", "28"] + class_files)
 
     # 3. AAPT2 Package
     aapt2 = os.path.join(BUILD_TOOLS, "aapt2.exe")
@@ -59,7 +65,10 @@ def main():
     ])
 
     # 4. Add classes.dex
-    run_cmd(["tar", "-uf", unsigned_apk, "-C", BIN_DIR, "classes.dex"])
+    classes_dex = os.path.join(BIN_DIR, "classes.dex")
+    if os.path.exists(classes_dex):
+        with zipfile.ZipFile(unsigned_apk, "a") as zf:
+            zf.write(classes_dex, "classes.dex")
 
     # 5. Sign
     apksigner = os.path.join(BUILD_TOOLS, "apksigner.bat")
