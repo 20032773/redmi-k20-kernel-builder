@@ -362,6 +362,9 @@ jobs:
           fi
           sha256sum release/* > release/SHA256SUMS
 
+          echo "RELEASE_NAME=${KERNEL_NAME}" >> $GITHUB_ENV
+          echo "RELEASE_TAG=${KERNEL_NAME}-build${{ github.run_number }}" >> $GITHUB_ENV
+
       - name: Upload flashable build
         if: success()
         uses: actions/upload-artifact@v4
@@ -376,8 +379,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          tag_name: ksu-next-build-${{ github.run_number }}
-          name: KernelSU Next Build #${{ github.run_number }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
           body_path: release/build-info.txt
           draft: false
           prerelease: false
