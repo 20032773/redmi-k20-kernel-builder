@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Redmi K20 核心更新助手</title>
+  <style>
+    :root {
+      --color-primary: #38bdf8;
+      --color-background: #020617;
+      --color-surface: #0f172a;
+      --color-on-surface: #f8fafc;
+      --color-on-surface-variant: #94a3b8;
+      --color-outline: #334155;
+    }
+    body {
+      margin: 0; padding: 16px;
+      background-color: var(--color-background);
+      color: var(--color-on-surface);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .header {
+      font-size: 22px; font-weight: bold; margin-bottom: 16px;
+      color: var(--color-primary); display: flex; align-items: center; gap: 8px;
+    }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-outline);
+      border-radius: 16px; padding: 16px; position: relative;
+    }
+    .card-title {
+      font-size: 14px; color: var(--color-on-surface-variant);
+      margin-bottom: 8px; text-transform: uppercase; font-weight: bold;
+    }
+    .stat-val { font-size: 16px; font-weight: 600; }
+    .btn {
+      width: 100%; padding: 12px; border-radius: 24px; border: none;
+      background: var(--color-primary); color: #000; font-weight: bold;
+      margin-top: 12px; cursor: pointer;
+    }
+    .btn:active { transform: scale(0.97); }
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155; transition: .3s; border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background-color: white; transition: .3s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--color-primary); }
+    input:checked + .slider:before { transform: translateX(20px); }
+  </style>
+</head>
+<body>
+  <div class="header">⚡ K20 核心更新助手</div>
+  <div class="grid">
+    <!-- Card 1: System Status -->
+    <div class="card">
+      <div class="card-title">📱 系統與核心狀態</div>
+      <div style="font-size: 14px; margin-bottom: 4px;">裝置: <span id="val-device">Redmi K20 (davinci)</span></div>
+      <div style="font-size: 14px; margin-bottom: 4px;">核心: <span id="val-kernel">載入中...</span></div>
+      <div style="font-size: 14px;">Root 狀態: <span id="val-root" style="color: #22c55e;">已檢測</span></div>
+    </div>
+
+    <!-- Card 2: GitHub Online Updater -->
+    <div class="card">
+      <div class="card-title">🚀 GitHub 最新核心版本</div>
+      <div class="stat-val" id="val-release-tag">正在查詢最新 Release...</div>
+      <button class="btn" onclick="flashLatestKernel()">一鍵下載並刷入最新核心</button>
+    </div>
+
+    <!-- Card 3: OTA Survival Guard -->
+    <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <div class="card-title">🛡️ LineageOS OTA 自動生存</div>
+        <div style="font-size: 13px; color: var(--color-on-surface-variant);">更新 ROM 自動保留核心與 Root</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="sw-addond" onchange="toggleAddonD(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- Card 4: Flashing Console -->
+    <div class="card">
+      <div class="card-title">📜 控制台日誌</div>
+      <pre id="console-log" style="font-size: 12px; background: #020617; padding: 8px; border-radius: 8px; height: 100px; overflow-y: auto; color: #38bdf8; margin: 0;">點擊下方按鈕開始記錄...</pre>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      if (window.Android) {
+        document.getElementById("val-kernel").innerText = window.Android.getKernelVersion();
+        document.getElementById("val-root").innerText = window.Android.checkRoot() ? "已取得 Root (KernelSU)" : "未取得 Root";
+        document.getElementById("sw-addond").checked = window.Android.isAddonDInstalled();
+        window.Android.fetchLatestRelease();
+      }
+    };
+
+    function updateReleaseInfo(tag) {
+      document.getElementById("val-release-tag").innerText = tag || "連線失敗";
+    }
+
+    function appendLog(msg) {
+      const el = document.getElementById("console-log");
+      el.innerText += "\n" + msg;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function flashLatestKernel() {
+      if (window.Android) {
+        window.Android.startFlashProcess();
+      }
+    }
+
+    function toggleAddonD(checked) {
+      if (window.Android) {
+        window.Android.setAddonD(checked);
+      }
+    }
+  </script>
+</body>
+</html>
