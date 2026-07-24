@@ -28,6 +28,11 @@ on:
         required: true
         default: true
         type: boolean
+      los_fw_date:
+        description: LineageOS supported firmware date (e.g. 2026-07-24 or 20260724, leave "auto" to use latest LineageOS commit date)
+        required: true
+        default: 'auto'
+        type: string
 
 permissions:
   contents: write
@@ -328,10 +333,14 @@ jobs:
           printf '\nsync;\nexit 0;\n' >> "$UPDATER"
           tail -n 2 "$UPDATER" | grep -qx 'exit 0;'
 
-          # Generate custom build names based on device model, LineageOS version, and build date
-          BUILD_DATE="$(date +'%Y%m%d')"
+          # Generate custom build names based on device model, LineageOS version, and LineageOS firmware date
+          if [ "${{ inputs.los_fw_date }}" != "auto" ] && [ -n "${{ inputs.los_fw_date }}" ]; then
+            LOS_DATE="${{ inputs.los_fw_date }}"
+          else
+            LOS_DATE="$(git -C kernel-source log -1 --format=%cd --date=format:'%Y%m%d')"
+          fi
           LOS_VER="$(echo "${{ inputs.kernel_ref }}" | sed 's/lineage-/lineageos/')"
-          ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next-AnyKernel3.zip"
+          ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${LOS_DATE}-KernelSU-Next-AnyKernel3.zip"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
           (cd AnyKernel3-kernel-only && \
@@ -346,11 +355,15 @@ jobs:
           mkdir -p release
           
           # Generate custom build names
-          BUILD_DATE="$(date +'%Y%m%d')"
+          if [ "${{ inputs.los_fw_date }}" != "auto" ] && [ -n "${{ inputs.los_fw_date }}" ]; then
+            LOS_DATE="${{ inputs.los_fw_date }}"
+          else
+            LOS_DATE="$(git -C kernel-source log -1 --format=%cd --date=format:'%Y%m%d')"
+          fi
           LOS_VER="$(echo "${{ inputs.kernel_ref }}" | sed 's/lineage-/lineageos/')"
-          KERNEL_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next"
-          ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next-AnyKernel3.zip"
-          DTBO_NAME="RedmiK20-davinci-${LOS_VER}-${BUILD_DATE}-KernelSU-Next-dtbo.img"
+          KERNEL_NAME="RedmiK20-davinci-${LOS_VER}-${LOS_DATE}-KernelSU-Next"
+          ZIP_NAME="RedmiK20-davinci-${LOS_VER}-${LOS_DATE}-KernelSU-Next-AnyKernel3.zip"
+          DTBO_NAME="RedmiK20-davinci-${LOS_VER}-${LOS_DATE}-KernelSU-Next-dtbo.img"
           
           cp "$ZIP_NAME" release/
           cp kernel-source/out/arch/arm64/boot/Image.gz "release/${KERNEL_NAME}"
