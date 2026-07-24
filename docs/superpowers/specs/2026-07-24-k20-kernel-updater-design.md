@@ -2,6 +2,7 @@
 
 **日期：** 2026-07-24  
 **應用包名：** `com.k0983.k20updater`  
+**專案性質：** 私人個人專用工具 (Private Personal Tool - 本地開發不推送到 GitHub)  
 **目標裝置：** Redmi K20 / Mi 9T (`davinci`)  
 **目標系統：** LineageOS 23.2（或具備 LineageOS Updater / `addon.d` 生存腳本支援之第三方 ROM）  
 
@@ -11,13 +12,15 @@
 
 ### 🎯 開發目標
 - **OTA 自動生存機制**：提供 `addon.d` 腳本管理功能，防止 LineageOS 系統 OTA 更新後丟失客製化 K20 核心與 KernelSU-Next Root 權限。
-- **一鍵連網更新核心**：讓使用者直接透過 Root 權限查詢、下載並刷入 GitHub Releases (`20032773/redmi-k20-kernel-builder`) 最新編譯好的 AnyKernel3 刷機包。
+- **一鍵連網更新核心**：讓使用者直接透過 Root 權限查詢、下載並刷入指定 GitHub Releases (`20032773/redmi-k20-kernel-builder`) 最新編譯好的 AnyKernel3 刷機包。
 - **分層解耦架構 (Clean Architecture)**：完全沿用 `ai-ledger-app` 記帳專案的四層架構（UI 介面 / Domain 領域業務 / Data 資料庫與 API / Core 底層核心）。
 - **Material You Bento Grid 介面**：提供現代化微醺玻璃（Liquid Glass）、動態取色與彈性觸覺（Haptic Feedback）回饋的便當盒網格儀表板。
+- **私人專屬與隱私保護**：本 App 專碼專用，僅在本地端進行編譯安裝，不會推送至任何公開 GitHub 倉庫。
 
 ### 🚫 非目標 (Non-Goals)
 - 支援不具備 `addon.d` 腳本機制的第三方 ROM。
-- 在手機本機直接編譯 Linux 核心（核心編譯依然由 GitHub Actions 自動化處理）。
+- 在手機本機直接編譯 Linux 核心（核心編譯由 GitHub Actions 自動化處理）。
+- 將本 App 的原始碼推送到公開的 GitHub 倉庫。
 
 ---
 
